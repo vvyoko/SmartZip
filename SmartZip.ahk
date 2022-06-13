@@ -5,12 +5,16 @@
 ini := A_ScriptDir "\SmartZip.ini"
 IniCreate
 
-;https://www.iconfont.cn/collections/detail?spm=a313x.7781069.0.da5a778a4&cid=24599
-TraySetIcon(icon := IniRead(ini, "set", "icon", ""))
-
 FileEncoding("UTF-8")
 
 zip := SmartZip(IniRead(ini, "set", "7zipDir", ""))
+
+;https://www.iconfont.cn/collections/detail?spm=a313x.7781069.0.da5a778a4&cid=24599
+
+if !FileExist(icon := IniRead(ini, "set", "icon", ""))
+    icon := zip.7zG
+
+TraySetIcon(icon)
 
 if A_Args.Length
     zip.Init(A_Args).Exec()
@@ -407,7 +411,7 @@ class SmartZip
             {
                 this.index := A_Index
                 RunWait(this.7zG ' a "' RegExReplace(i, ".*\\") args ' "' i '\*"', , count > 1 ? "hide" : "", &pid)
-                this.Loging("压缩 <--> " path, 1)
+                this.Loging("压缩 <--> " i, 1)
             }
             return
         } else if this.arr.Length = 1	;单个文件
@@ -849,7 +853,7 @@ IniCreate()
         "`n`n"
         , ini)
 
-    IniWrite("D:\OneDrive\Program\7-zip", ini, "set", "7zipDir")
+    IniWrite(A_ScriptDir "\7-zip", ini, "set", "7zipDir")
     IniWrite("10", ini, "set", "succesSpercent")
     IniWrite("0", ini, "set", "delSource")
     IniWrite("0", ini, "set", "delWhenHasPass")
