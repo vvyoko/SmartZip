@@ -158,8 +158,16 @@ class SmartZip
                 outFile := this.MoveItem(souceFile, this.dir "\" name, isDir, A_LineNumber)
 
                 this.RecycleItem(tmpDir, A_LineNumber, true)
-                if !isDir
-                    UnZipNesting(outFile, ext)
+                if !isDir && this.IsArchive(ext)
+                {
+                    IniWrite(1, ini, "temp", "isLoop")
+                    RunWait('"' A_ScriptFullPath '" x "' outFile '"')
+                    this.Loging("解压嵌套 <--> " i, A_LineNumber)
+                    IniWrite("", ini, "temp", "isLoop")
+
+                    this.RecycleItem(i, A_LineNumber)	;删除嵌套文件
+                }
+                ; UnZipNesting(outFile, ext)
             } else	;多个文件
             {
                 SplitPath(i, , , , &nameNoEXT)
@@ -181,7 +189,6 @@ class SmartZip
         {
             if !this.IsArchive(ext)
                 return
-
             IniWrite(1, ini, "temp", "isLoop")
             RunWait('"' A_ScriptFullPath '" x "' path '"')
             this.Loging("解压嵌套 <--> " path, A_LineNumber)
@@ -243,6 +250,7 @@ class SmartZip
                 isTrue := ""
                 folderSize := ComObject("Scripting.FileSystemObject").GetFolder(tmpDir).Size
 
+                this.Loging("文件大小: " folderSize " 临时文件夹大小: " this.size, A_LineNumber)
                 if folderSize >= this.size
                     isTrue := true
                 else if this.size - folderSize <= this.size / 100 * this.succesSpercent
@@ -253,6 +261,7 @@ class SmartZip
                     this.Loging("解压 <--> " path, A_LineNumber)
                     return true
                 }
+
                 this.RecycleItem(tmpDir, A_LineNumber, true)
                 return false
             }
@@ -279,9 +288,7 @@ class SmartZip
             }
 
             if (isDir := DirExist(path)) && ComObject("Scripting.FileSystemObject").GetFolder(path).Size = 0	;空文件夹
-            {
                 return this.RecycleItem(path, A_LineNumber)
-            }
 
             SplitPath(path, &name, &dir, &ext, &nameNoExt)
 
