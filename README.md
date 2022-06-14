@@ -31,7 +31,7 @@
    - 使用7-zip打开: `SmartZip.exe  o  file1`
    - 压缩: `SmartZip.exe  a  file1 file2 file3 ....`
  - Directory Opus 示例
-   - 智能解压: `SmartZip.exe o {allfilepath}`
+   - 智能解压: `SmartZip.exe x {allfilepath}`
    - 使用7-zip打开: `SmartZip.exe o {allfilepath} `
    - 压缩: `SmartZip.exe a {allfilepath} `
  - 向 `Contextmenu.exe` 传递参数或直接运行
