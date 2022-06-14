@@ -1,5 +1,5 @@
 ﻿#SingleInstance off
-; #NoTrayIcon
+#NoTrayIcon
 #Include <PathDupl>
 
 ini := A_ScriptDir "\SmartZip.ini"
@@ -109,7 +109,7 @@ class SmartZip
             ExitApp
         }
 
-        this.continue := false
+        this.continue := this.guiShow := false
         this.ext := Map()
         this.extExp := []
     }
@@ -152,27 +152,27 @@ class SmartZip
 
     Unzip()
     {
-
         this.password := ["", FormatPassword(A_Clipboard), IniRead(ini, "temp", "lastPass", "")]
         this.delSource := IniRead(ini, "set", "delSource", "")
         this.delWhenHasPass := IniRead(ini, "set", "delWhenHasPass", "")
         this.IniReadLoop("password", this.password)
-
         this.succesSpercent := IniRead(ini, "set", "succesSpercent", 0)
+        this.hideRunSize := IniRead(ini, "set", "hideRunSize", 0x7FFFFFFFFFFFFFFF)
 
-        if this.muilt
-            IniWrite(1, ini, "temp", "guiShow"), this.Gui()
-
-        isGui := IniRead(ini, "temp", "guiShow", "")
+        ;批量解压文件中某项为嵌套压缩包时不显示7zip界面
+        guiShow := IniRead(ini, "temp", "guiShow", "")
 
         for i in this.arr
         {
-            this.CheckCMD()
-
             this.tmpDir := tmpDir := '__7z' A_Now
             this.index := A_Index
 
             this.size := FileGetSize(i)
+            hideBool := this.size / 1024 / 1024 < this.hideRunSize
+
+            if this.muilt && !this.guiShow && !hideBool
+                IniWrite(1, ini, "temp", "guiShow"), this.Gui()
+
             zipx(i)
 
             if !DirExist(tmpDir)	;密码错误以及未输入正确密码
@@ -223,6 +223,8 @@ class SmartZip
                 this.MoveItem(tmpDir, this.dir "\" nameNoEXT, 1)
             }
         }
+        if hideBool ;隐藏运行时可以不会刷新,发送刷新到当前窗口
+            Send("{F5}")
         if this.muilt
             IniWrite("", ini, "temp", "guiShow")
 
@@ -235,6 +237,7 @@ class SmartZip
             {
                 cmd := this.7z ' t "' path '" -aou -bsp1 -p"' i '"'
                 log .= cmd "`n"
+                this.CheckCMD()
                 this.RunCmd(cmd)
 
                 if this.continue
@@ -253,7 +256,10 @@ class SmartZip
 
             if !this.error	;密码正确或无需密码
             {
-                RunWait(this.7zG ' x "' path '" -aou -o' tmpDir pass, , isGui ? "hide" : "", &pid)
+                if hideBool
+                    RunWait(this.7z ' x "' path '" -aou -o' tmpDir pass, , "hide")
+                else
+                    RunWait(this.7zG ' x "' path '" -aou -o' tmpDir pass, , this.guiShow || guiShow ? "hide" : "")
 
                 if IsSuccess()
                 {
@@ -375,9 +381,9 @@ class SmartZip
             if !this.error
             {
                 Run(this.7zFM path, , , &pid)
-                hwnd := WinWaitActive("ahk_pid" pid)
-                if WinActive("ahk_class #32770 ahk_pid " pid)
-                    WinClose(), this.error := true
+                ; hwnd := WinWaitActive("ahk_pid" pid)
+                ; if WinActive("ahk_class #32770 ahk_pid " pid)
+                ;     WinClose(), this.error := true
                 this.Loging("打开 <--> " path, 1)
             }
         }
@@ -410,7 +416,7 @@ class SmartZip
             for i in this.arr
             {
                 this.index := A_Index
-                RunWait(this.7zG ' a "' RegExReplace(i, ".*\\") args ' "' i '\*"', , count > 1 ? "hide" : "", &pid)
+                RunWait(this.7zG ' a "' RegExReplace(i, ".*\\") args ' "' i '\*"', , count > 1 ? "hide" : "")
                 this.Loging("压缩 <--> " i, 1)
             }
             return
@@ -428,6 +434,7 @@ class SmartZip
 
     Gui()
     {
+        this.guiShow := true
         DetectHiddenWindows(1)
 
         g := Gui("+LastFound")
@@ -633,6 +640,24 @@ class SmartZip
                     arrMap[var] := true
             }
         }
+        if Type(arrMap) = "Array"
+        {
+            loop
+            {
+                if arrMap.Length < A_Index
+                    break
+
+                var := arrMap[A_Index]
+                temp := []
+                for i in arrMap
+                    if var = i
+                        temp.Push(A_Index)
+
+                temp.RemoveAt(1)
+                loop temp.Length
+                    arrMap.RemoveAt(temp[temp.Length - A_Index + 1])
+            }
+        }
     }
 
     RecycleItem(souce, delete := false)
@@ -733,7 +758,6 @@ class SmartZip
                 this.IniReadLoop(what "CheckSuccessExp", checkSave.successExp, , true)
             }
             check := objCloneMap(checkSave)
-
         } else if line
         {
             for i in check.errorrContinueExp
@@ -816,7 +840,8 @@ IniCreate()
         "; 名称后面为Exp的表示其为正则表达式`n"
         "; 如有一项右键菜单启用则会在关闭ini文件时弹出右键关联界面`n"
 
-        "`n; succesSpercent 用于判断是否解压成功的文件大小百分比,如果解压后大小大于源文件成功,如下设其为 10`n"
+        "`n; hideRunSize 当文件大小小于指定大小时不显示界面,无干扰但稍慢(0-100ms) 单位MB`n"
+        "; successPercent 用于判断是否解压成功的文件大小百分比,如果解压后大小大于源文件成功,如下设其为 10`n"
         "; 源文件大小 - 解压后大小 > 源文件*10% 则代表解压成功,否则代表解压失败(删除解压后的文件)`n"
         "; delSource 解压后删除源文件 1启用 0禁用`n"
         "; delWhenHasPass 只删除包含密码的源文件`n"
@@ -854,7 +879,8 @@ IniCreate()
         , ini)
 
     IniWrite(A_ScriptDir "\7-zip", ini, "set", "7zipDir")
-    IniWrite("10", ini, "set", "succesSpercent")
+    IniWrite("10", ini, "set", "hideRunSize")
+    IniWrite("10", ini, "set", "successPercent")
     IniWrite("0", ini, "set", "delSource")
     IniWrite("0", ini, "set", "delWhenHasPass")
     IniWrite("5", ini, "set", "logLevel")
@@ -876,6 +902,7 @@ IniCreate()
     IniWrite("bz2", ini, "ext", "6")
     IniWrite("gz", ini, "ext", "7")
     IniWrite("gzip", ini, "ext", "8")
+    IniWrite("tar", ini, "ext", "9")
 
     IniWrite("^\d+$", ini, "extExp", "1")
     IniWrite("zi", ini, "extExp", "2")
