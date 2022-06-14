@@ -1,10 +1,18 @@
-﻿#SingleInstance off
+﻿;@Ahk2Exe-SetName         SmartZip
+;@Ahk2Exe-SetDescription  7-zip的功能扩展
+;@Ahk2Exe-SetCopyright    Copyright (c) since 2022
+;@Ahk2Exe-SetCompanyName  viv
+;@Ahk2Exe-SetOrigFilename SmartZip.exe
+;@Ahk2Exe-SetMainIcon     ico.ico
+;@Ahk2Exe-SetFileVersion 2.11
+;@Ahk2Exe-SetProductVersion %A_AhkVersion%
+;@Ahk2Exe-ExeName SmartZip.exe
+
+#SingleInstance off
 #NoTrayIcon
 
 ini := A_ScriptDir "\SmartZip.ini"
 IniCreate
-
-ExitApp
 
 zip := SmartZip(IniRead(ini, "set", "7zipDir", ""))
 
@@ -75,8 +83,9 @@ class SmartZip
         this.IniReadLoop("extExp", this.extExp)
         this.logLevel := IniRead(ini, "set", "logLevel", 0)
         this.cmdLog := IniRead(ini, "set", "cmdLog", 0)
+        this.hideRunSize := IniRead(ini, "set", "hideRunSize", 0x7FFFFFFFFFFFFFFF)
 
-        SplitPath(this.arr[1], &name, &dir)
+        SplitPath(this.arr[1], , &dir)
         SetWorkingDir(this.dir := dir)
         return this
     }
@@ -99,7 +108,6 @@ class SmartZip
         this.delWhenHasPass := IniRead(ini, "set", "delWhenHasPass", 0)
         this.IniReadLoop("password", this.password)
         this.succesSpercent := IniRead(ini, "set", "succesSpercent", 0)
-        this.hideRunSize := IniRead(ini, "set", "hideRunSize", 0x7FFFFFFFFFFFFFFF)
 
         ;批量解压文件中某项为嵌套压缩包时不显示7zip界面
         guiShow := IniRead(ini, "temp", "guiShow", "")
@@ -163,8 +171,8 @@ class SmartZip
             }
         }
 
-        if hideBool	;隐藏运行时可以不会刷新,发送刷新到当前窗口
-            Send("{F5}")
+        ; if hideBool	;隐藏运行时可以不会刷新,发送刷新到当前窗口
+        ;     Send("{F5}")
         if this.muilt
             IniWrite("", ini, "temp", "guiShow")
 
@@ -314,7 +322,7 @@ class SmartZip
 
     OpenZip()
     {
-        SplitPath(this.arr[1], &name, , &ext)
+        SplitPath(this.arr[1], , , &ext, &nameNoExt)
         this.CheckCMD("openZip")
 
         if !this.muilt
@@ -343,11 +351,15 @@ class SmartZip
 
         if this.muilt || this.error
         {
+            args := IniRead(ini, "7z", "openAdd")
             path := ""
             for i in this.arr
                 path .= ' "' i '" '
-            zipname := this.muilt ? StrReplace(RegExReplace(this.dir, ".+\\"), ":") : name
-            RunWait(this.7zG ' a "' zipname IniRead(ini, "7z", "openAdd") path)
+            zipname := this.muilt ? StrReplace(RegExReplace(this.dir, ".+\\"), ":") : nameNoExt
+            zipname := this.AUO(zipname, RegExReplace(args, '(.+?)".+', "$1"))
+
+            RunWait(this.7zG ' a "' zipname args path)
+
             this.Loging("新建压缩 <--> " path, A_LineNumber)
         }
     }
@@ -360,30 +372,66 @@ class SmartZip
         for i in this.arr
             if DirExist(i)
                 count++
+        hideBool := IsHide()
 
         args := IniRead(ini, "7z", "add")
+        ext := RegExReplace(args, '(.+?)".+', "$1")
+
         if count = this.arr.Length	;全是文件夹,单独添加
         {
-            if this.muilt
-                this.Gui
+
             for i in this.arr
             {
+                hideBool := IsHide(i)
+                if !hideBool && !this.guiShow
+                    this.Gui
+
                 this.index := A_Index
-                RunWait(this.7zG ' a "' RegExReplace(i, ".*\\") args ' "' i '\*"', , count > 1 ? "hide" : "")
+                RunWait((hideBool ? this.7z : this.7zG) ' a "' this.AUO(RegExReplace(i, ".*\\"), ext) args ' "' i '\*"', , (hideBool || count > 1) ? "hide" : "")
                 this.Loging("压缩 <--> " i, A_LineNumber)
             }
             return
+
         } else if this.arr.Length = 1	;单个文件
-            RunWait(this.7zG ' a "' nameNoExt args ' "' this.arr[1] '"')
+            RunWait((hideBool ? this.7z : this.7zG) ' a "' this.AUO(nameNoExt, ext) args ' "' this.arr[1] '"', , hideBool ? "hide" : ""), this.Loging("压缩 <--> " this.arr[1], A_LineNumber)
         else	;文件文件夹混合
         {
             for i in this.arr
                 path .= ' "' i '" '
-            RunWait(this.7zG ' a "' StrReplace(RegExReplace(this.dir, ".+\\"), ":") args path)
+            RunWait((hideBool ? this.7z : this.7zG) ' a "' this.AUO(RegExReplace(this.dir, ".+\\"), ext) args path, , hideBool ? "hide" : "")
+            this.Loging("压缩 <--> " path, A_LineNumber)
         }
-        this.Loging("压缩 <--> " path, A_LineNumber)
+        ; if hideBool
+        ;     Send("{F5}")
 
+        IsHide(dir := "")
+        {
+            countSzie := 0
+            if dir
+            {
+                loop files dir "\*.*", "RDF"
+                    if (countSzie += A_LoopFileSizeMB) > this.hideRunSize
+                        return false
+                return true
+            }
+
+            for i in this.arr
+            {
+                if DirExist(i)
+                {
+                    loop files i "\*.*", "RDF"
+                        if (countSzie += A_LoopFileSizeMB) > this.hideRunSize
+                            return false
+                } else
+                    countSzie += FileGetSize(i, "M")
+                if countSzie > this.hideRunSize
+                    return false
+            }
+            return true
+        }
     }
+
+    AUO(name, ext) => StrReplace(this.PathDupl(this.dir "\" name ext, 0), ext)
 
     Gui()
     {
@@ -629,25 +677,27 @@ class SmartZip
     {
         try
         {
-            (isDir ? DirMove : FileMove)(souce, oPath := PathDupl())
+            (isDir ? DirMove : FileMove)(souce, oPath := this.PathDupl(dest, isdir))
             this.Loging(souce " <--> " oPath, lineNum, 2)
             return oPath
         } catch
             return souce
+    }
 
-        PathDupl()
+    PathDupl(path, isdir := 0)
+    {
+        if FileExist(path)	;目标文件重复
         {
-            if FileExist(dest)
-            {
-                SplitPath(dest, , &dir, &ext, &nameNoext)
-                if isdir && ext
-                    nameNoext := RegExReplace(dest, ".*\\")
-                ext := (isdir || !ext) ? "" : "." ext
-                while FileExist(dest)
-                    dest := dir '\' nameNoext '_' A_Index ext
-            }
-            return dest
+            SplitPath(path, , &dir, &ext, &nameNoExt)
+
+            if isdir && ext	;文件夹包含.被识别为文件  示例 " D:\1.2"
+                nameNoExt := RegExReplace(path, ".*\\")
+
+            ext := (isdir || !ext) ? "" : "." ext	;目标为文件夹 或 目标为文件但无 ext 时 ext 为空
+            while FileExist(path)
+                path := dir '\' nameNoExt '_' A_Index ext
         }
+        return path
     }
 
     IsArchive(ext)
@@ -890,7 +940,7 @@ IniCreate()
         IniWrite("\d*-\d*-\d* *\d*:\d*:\d* *\d* *\d* *(\d*) files(, (\d*) folders)?<--->1", ini, "openZipCheckSuccessExp", "1")	;多少个文件多少个文件夹则可能是压缩文件
 
         IniWrite('.zip" -tzip -mx=0 -aou -ad', ini, "7z", "openAdd")
-        IniWrite('.zip" -aou', ini, "7z", "add")
+        IniWrite('.zip"', ini, "7z", "add")
 
         IniWrite("1", ini, "menu", "openZip")
         IniWrite("用7-Zip打开", ini, "menu", "openZipName")
@@ -907,10 +957,11 @@ IniCreate()
         IniWrite("0", ini, "set", "cmdLog")
     }
 
-    if !iniExist || VersionsCompare("2.10")
-        IniWrite("2.10", ini, "other", "version")
+    if !iniExist || VersionsCompare("2.11")
+        IniWrite("2.11", ini, "other", "version")
 
-    IniSetting
+    if !iniExist
+        IniSetting
 
     VersionsCompare(str)
     {
