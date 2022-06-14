@@ -43,10 +43,8 @@ class SmartZip
         sevenZipDir := RTrim(sevenZipDir, "\")
 
         if !DirExist(sevenZipDir)
-        {
-            MsgBox("请在 SmartZip.ini 中 7zipDir 选项中设置 7zip 的文件夹")
-            ExitApp
-        }
+
+            MsgBox("请在 SmartZip.ini 中 7zipDir 选项中设置 7zip 的文件夹"), ExitApp()
 
         this.7z := sevenZipDir "\7z.exe"
         this.7zG := sevenZipDir "\7zG.exe"
@@ -78,6 +76,8 @@ class SmartZip
                     this.arr.Push(A_LoopFileFullPath)
         }
 
+        if !this.arr.Length
+            ExitApp
         this.muilt := this.arr.Length > 1	;多文件
         this.IniReadLoop("ext", this.ext, true)
         this.IniReadLoop("extExp", this.extExp)
@@ -182,11 +182,15 @@ class SmartZip
             if !this.IsArchive(ext)
                 return
 
+            time := FileGetTime(path)
+            size := FileGetSize(path)
             IniWrite(1, ini, "temp", "isLoop")
             RunWait('"' A_ScriptFullPath '" x "' path '"')
             this.Loging("解压嵌套 <--> " path, A_LineNumber)
             IniWrite("", ini, "temp", "isLoop")
-            this.RecycleItem(path, A_LineNumber)	;删除嵌套文件
+
+            if FileGetTime(path) = time && FileGetSize(path) = size
+                this.RecycleItem(path, A_LineNumber)	;删除嵌套文件
         }
 
         ;执行解压
@@ -206,10 +210,7 @@ class SmartZip
                 if !this.error
                 {
                     if i
-                    {
-                        pass := ' -p"' i '"'
-                        IniWrite(i, ini, "temp", "lastPass")
-                    }
+                        IniWrite(i, ini, "temp", "lastPass"), pass := ' -p"' i '"'
                     break
                 }
             }
@@ -243,6 +244,7 @@ class SmartZip
                 isTrue := ""
                 folderSize := ComObject("Scripting.FileSystemObject").GetFolder(tmpDir).Size
 
+                this.Loging("文件大小: " folderSize " 临时文件夹大小: " this.size, A_LineNumber)
                 if folderSize >= this.size
                     isTrue := true
                 else if this.size - folderSize <= this.size / 100 * this.succesSpercent
@@ -279,9 +281,7 @@ class SmartZip
             }
 
             if (isDir := DirExist(path)) && ComObject("Scripting.FileSystemObject").GetFolder(path).Size = 0	;空文件夹
-            {
                 return this.RecycleItem(path, A_LineNumber)
-            }
 
             SplitPath(path, &name, &dir, &ext, &nameNoExt)
 
@@ -311,10 +311,8 @@ class SmartZip
         FormatPassword(str)
         {
             if StrLen(str) < 100
-            {
-                str := RegExReplace(str, "(\R*)")	;移除所有换行符
-                str := RegExReplace(str, "^[ \t]+|[ \t]+$")	;移除首尾所有空格或制表符
-            } else
+                str := RegExReplace(RegExReplace(str, "(\R*)"), "^[ \t]+|[ \t]+$")	;移除所有换行符及首尾所有空格或制表符
+            else
                 str := ""
             return str
         }
@@ -807,11 +805,8 @@ class SmartZip
                 if line ~= i && --check.successExp[i] < 1
                     return LogAndReturn(5, A_LineNumber)
 
-            if whatSave = "unZip"
-            {
-                if (line ~= "^ +[1-9]+%") && !(line ~= "^ +[1-9]+%.+Open$" || line ~= "^ +[1-9]+%$")
-                    return LogAndReturn(6, A_LineNumber)
-            }
+            if whatSave = "unZip" && (line ~= "^ +[1-9]+%") && !(line ~= "^ +[1-9]+%.+Open$" || line ~= "^ +[1-9]+%$")
+                return LogAndReturn(6, A_LineNumber)
 
             LogAndReturn(num, lineNum)
             {
@@ -987,13 +982,7 @@ IniSetting()
     SetTimer(fn, 0)
     hasShow++
 
-    fn()
-    {
-        if WinExist("SmartZip.ini") && WinActive()
-            ToolTip("设置完 ini 后会继续运行", 0, 0)
-        else
-            ToolTip
-    }
+    fn() => WinExist("SmartZip.ini") && WinActive() ? ToolTip("设置完 ini 后会继续运行", 0, 0) : ToolTip()
 }
 
 ContextMenu()

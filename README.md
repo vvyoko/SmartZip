@@ -25,13 +25,13 @@
 
 ## 运行方式
  - 如果启用了右键,可在资源管理器中右键文件使用
-    - 右键实现方式不完美,具体可查看ini注释
+    - 右键实现方式不完美,具体可查看`ini说明.txt`
  - 通过直接传递参数运行(推荐但比较繁杂)
    - 智能解压: `SmartZip.exe  x  file1 file2 file3 ....`
    - 使用7-zip打开: `SmartZip.exe  o  file1`
    - 压缩: `SmartZip.exe  a  file1 file2 file3 ....`
  - Directory Opus 示例
-   - 智能解压: `SmartZip.exe o {allfilepath}`
+   - 智能解压: `SmartZip.exe x {allfilepath}`
    - 使用7-zip打开: `SmartZip.exe o {allfilepath} `
    - 压缩: `SmartZip.exe a {allfilepath} `
  - 向 `Contextmenu.exe` 传递参数或直接运行
