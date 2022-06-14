@@ -173,9 +173,9 @@ class SmartZip
                 SplitPath(i, , , , &nameNoEXT)
                 outFile := this.MoveItem(tmpDir, this.dir "\" nameNoEXT, 1, A_LineNumber)
 
-                if IniRead(ini, "set", "muiltNesting", false)
-                    loop files outFile "\*.*", "F"
-                        UnZipNesting(A_LoopFileFullPath, A_LoopFileExt)
+                ; if IniRead(ini, "set", "muiltNesting", false)
+                ;     loop files outFile "\*.*", "F"
+                ;         UnZipNesting(A_LoopFileFullPath, A_LoopFileExt)
             }
         }
 
