@@ -1,11 +1,10 @@
 ﻿#SingleInstance off
 #NoTrayIcon
-#Include <PathDupl>
 
 ini := A_ScriptDir "\SmartZip.ini"
 IniCreate
 
-FileEncoding("UTF-8")
+ExitApp
 
 zip := SmartZip(IniRead(ini, "set", "7zipDir", ""))
 
@@ -25,64 +24,6 @@ else
 }
 
 ExitApp
-
-ContextMenu()
-{
-    openZip := IniRead(ini, "menu", "openZip", "")
-    unZip := IniRead(ini, "menu", "unZip", "")
-    addZip := IniRead(ini, "menu", "addZip", "")
-
-    if !openZip && !unZip && !addZip
-        return
-
-    keyPath := "HKCU\SOFTWARE\Classes\AllFilesystemObjects\shell"
-
-    answer := MsgBox("`t点击是注册右键菜单,否删除右键菜单,取消退出`t", "SmartZip", "YNC")
-    if answer = "Yes"
-    {
-        menuPath := A_ScriptDir "\Contextmenu"
-
-        if FileExist(menuPath ".ahk")
-            menuPath := '"' A_AhkPath '" "' menuPath '.ahk" '
-        else if FileExist(menuPath ".exe")
-            menuPath := '"' menuPath '.exe" '
-        else
-            MsgBox("右键菜单所需要文件不存在"), ExitApp()
-
-        if openZip
-        {
-            RegWrite(icon, "REG_SZ", keyPath "\OpenZip", "Icon")
-            RegWrite(IniRead(ini, "menu", "openZipName"), "REG_SZ", keyPath "\OpenZip")
-            RegWrite(menuPath "o", "REG_SZ", keyPath "\OpenZip\command")
-        }
-
-        if unZip
-        {
-            RegWrite(icon, "REG_SZ", "HKCU\SOFTWARE\Classes\*\shell\UnZip", "Icon")
-            RegWrite(IniRead(ini, "menu", "unZipName"), "REG_SZ", "HKCU\SOFTWARE\Classes\*\shell\UnZip")
-            RegWrite(menuPath "x", "REG_SZ", "HKCU\SOFTWARE\Classes\*\shell\UnZip\command")
-        }
-
-        if addZip
-        {
-            RegWrite(icon, "REG_SZ", keyPath "\AddZip", "Icon")
-            RegWrite(IniRead(ini, "menu", "addZipName"), "REG_SZ", keyPath "\AddZip")
-            RegWrite(menuPath "a", "REG_SZ", keyPath "\AddZip\command")
-        }
-
-        TrayTip("已注册右键菜单", "SmartZip")
-        ToolTip("已注册右键菜单")
-
-    } else if answer = "No"
-    {
-        try RegDeleteKey(keyPath "\OpenZip")
-        try RegDeleteKey("HKCU\SOFTWARE\Classes\*\shell\UnZip")
-        try RegDeleteKey(keyPath "\AddZip")
-        TrayTip("右键菜单已删除", "SmartZip")
-        ToolTip("右键菜单已删除")
-    }
-    Sleep(2000)
-}
 
 class SmartZip
 {
@@ -132,7 +73,8 @@ class SmartZip
         this.muilt := this.arr.Length > 1	;多文件
         this.IniReadLoop("ext", this.ext, true)
         this.IniReadLoop("extExp", this.extExp)
-        this.logLevel := IniRead(ini, "set", "logLevel")
+        this.logLevel := IniRead(ini, "set", "logLevel", 0)
+        this.cmdLog := IniRead(ini, "set", "cmdLog", 0)
 
         SplitPath(this.arr[1], &name, &dir)
         SetWorkingDir(this.dir := dir)
@@ -153,8 +95,8 @@ class SmartZip
     Unzip()
     {
         this.password := ["", FormatPassword(A_Clipboard), IniRead(ini, "temp", "lastPass", "")]
-        this.delSource := IniRead(ini, "set", "delSource", "")
-        this.delWhenHasPass := IniRead(ini, "set", "delWhenHasPass", "")
+        this.delSource := IniRead(ini, "set", "delSource", 0)
+        this.delWhenHasPass := IniRead(ini, "set", "delWhenHasPass", 0)
         this.IniReadLoop("password", this.password)
         this.succesSpercent := IniRead(ini, "set", "succesSpercent", 0)
         this.hideRunSize := IniRead(ini, "set", "hideRunSize", 0x7FFFFFFFFFFFFFFF)
@@ -205,28 +147,39 @@ class SmartZip
                 isDir := DirExist(souceFile)
                 SplitPath(souceFile, &name, , &ext)
 
-                outFile := this.MoveItem(souceFile, this.dir "\" name, isDir)
+                outFile := this.MoveItem(souceFile, this.dir "\" name, isDir, A_LineNumber)
 
-                this.RecycleItem(tmpDir, true)
-                if !isDir && this.IsArchive(ext)	;解压嵌套压缩文件
-                {
-                    IniWrite(1, ini, "temp", "isLoop")
-                    RunWait('"' A_ScriptFullPath '" x "' outFile '"')
-                    IniWrite("", ini, "temp", "isLoop")
-
-                    this.RecycleItem(i)	;删除嵌套文件
-                }
-
+                this.RecycleItem(tmpDir, A_LineNumber, true)
+                if !isDir
+                    UnZipNesting(outFile, ext)
             } else	;多个文件
             {
                 SplitPath(i, , , , &nameNoEXT)
-                this.MoveItem(tmpDir, this.dir "\" nameNoEXT, 1)
+                outFile := this.MoveItem(tmpDir, this.dir "\" nameNoEXT, 1, A_LineNumber)
+
+                if IniRead(ini, "set", "muiltNesting", false)
+                    loop files outFile "\*.*", "F"
+                        UnZipNesting(A_LoopFileFullPath, A_LoopFileExt)
             }
         }
-        if hideBool ;隐藏运行时可以不会刷新,发送刷新到当前窗口
+
+        if hideBool	;隐藏运行时可以不会刷新,发送刷新到当前窗口
             Send("{F5}")
         if this.muilt
             IniWrite("", ini, "temp", "guiShow")
+
+        ;解压嵌套
+        UnZipNesting(path, ext)
+        {
+            if !this.IsArchive(ext)
+                return
+
+            IniWrite(1, ini, "temp", "isLoop")
+            RunWait('"' A_ScriptFullPath '" x "' path '"')
+            this.Loging("解压嵌套 <--> " path, A_LineNumber)
+            IniWrite("", ini, "temp", "isLoop")
+            this.RecycleItem(path, A_LineNumber)	;删除嵌套文件
+        }
 
         ;执行解压
         zipx(path)
@@ -252,7 +205,7 @@ class SmartZip
                     break
                 }
             }
-            this.Loging(RTrim(log, "`n"), 2)
+            this.Loging(RTrim(log, "`n"), A_LineNumber, 3)
 
             if !this.error	;密码正确或无需密码
             {
@@ -264,15 +217,15 @@ class SmartZip
                 if IsSuccess()
                 {
                     if IniRead(ini, "temp", "isLoop", "")
-                        this.RecycleItem(path, true)
+                        this.RecycleItem(path, A_LineNumber, true)
                     else if pass && this.delWhenHasPass
-                        this.RecycleItem(path)
+                        this.RecycleItem(path, A_LineNumber)
                 }
             } else	;密码错误需手动输入密码
             {
                 RunWait(this.7zG ' x "' path '" -aou -o' tmpDir)
                 if IsSuccess() && this.delSource
-                    this.RecycleItem(path)
+                    this.RecycleItem(path, A_LineNumber)
             }
 
             IsSuccess()
@@ -284,15 +237,15 @@ class SmartZip
 
                 if folderSize >= this.size
                     isTrue := true
-                else if folderSize - this.size <= this.size / 100 * this.succesSpercent
+                else if this.size - folderSize <= this.size / 100 * this.succesSpercent
                     isTrue := true
 
                 if isTrue
                 {
-                    this.Loging("解压 <--> " path, 1)
+                    this.Loging("解压 <--> " path, A_LineNumber)
                     return true
                 }
-                this.RecycleItem(tmpDir, true)
+                this.RecycleItem(tmpDir, A_LineNumber, true)
                 return false
             }
         }
@@ -319,32 +272,32 @@ class SmartZip
 
             if (isDir := DirExist(path)) && ComObject("Scripting.FileSystemObject").GetFolder(path).Size = 0	;空文件夹
             {
-                return this.RecycleItem(path)
+                return this.RecycleItem(path, A_LineNumber)
             }
 
             SplitPath(path, &name, &dir, &ext, &nameNoExt)
 
             for i in obj.delete.ext
                 if ext = i
-                    return this.RecycleItem(path)
+                    return this.RecycleItem(path, A_LineNumber)
             for i in obj.delete.name
                 if InStr(name, i)
-                    return this.RecycleItem(path)
+                    return this.RecycleItem(path, A_LineNumber)
             for i in obj.delete.exp
                 if name ~= i
-                    return this.RecycleItem(path)
+                    return this.RecycleItem(path, A_LineNumber)
 
             for ori, out in obj.rename.ext
                 if !isDir && ext = ori
-                    path := this.MoveItem(path, dir '\' nameNoExt '.' (ext := out), 0)
+                    path := this.MoveItem(path, dir '\' nameNoExt '.' (ext := out), 0, A_LineNumber)
 
             for needle, replaceText in obj.rename.name
                 if InStr(name, needle)
-                    SplitPath(path := this.MoveItem(path, dir '\' StrReplace(name, needle, replaceText), isDir), &name, , , &nameNoExt)
+                    SplitPath(path := this.MoveItem(path, dir '\' StrReplace(name, needle, replaceText), isDir, A_LineNumber), &name, , , &nameNoExt)
 
             for needle, replaceText in obj.rename.exp
                 if name ~= needle
-                    SplitPath(path := this.MoveItem(path, dir '\' RegExReplace(name, needle, replaceText), isDir), &name, , , &nameNoExt)
+                    SplitPath(path := this.MoveItem(path, dir '\' RegExReplace(name, needle, replaceText), isDir, A_LineNumber), &name, , , &nameNoExt)
         }
 
         FormatPassword(str)
@@ -384,7 +337,7 @@ class SmartZip
                 ; hwnd := WinWaitActive("ahk_pid" pid)
                 ; if WinActive("ahk_class #32770 ahk_pid " pid)
                 ;     WinClose(), this.error := true
-                this.Loging("打开 <--> " path, 1)
+                this.Loging("打开 <--> " path, A_LineNumber)
             }
         }
 
@@ -395,7 +348,7 @@ class SmartZip
                 path .= ' "' i '" '
             zipname := this.muilt ? StrReplace(RegExReplace(this.dir, ".+\\"), ":") : name
             RunWait(this.7zG ' a "' zipname IniRead(ini, "7z", "openAdd") path)
-            this.Loging("新建压缩 <--> " path, 1)
+            this.Loging("新建压缩 <--> " path, A_LineNumber)
         }
     }
 
@@ -417,7 +370,7 @@ class SmartZip
             {
                 this.index := A_Index
                 RunWait(this.7zG ' a "' RegExReplace(i, ".*\\") args ' "' i '\*"', , count > 1 ? "hide" : "")
-                this.Loging("压缩 <--> " i, 1)
+                this.Loging("压缩 <--> " i, A_LineNumber)
             }
             return
         } else if this.arr.Length = 1	;单个文件
@@ -428,7 +381,7 @@ class SmartZip
                 path .= ' "' i '" '
             RunWait(this.7zG ' a "' StrReplace(RegExReplace(this.dir, ".+\\"), ":") args path)
         }
-        this.Loging("压缩 <--> " path, 1)
+        this.Loging("压缩 <--> " path, A_LineNumber)
 
     }
 
@@ -494,7 +447,7 @@ class SmartZip
             if ProcessExist("7zG.exe")
                 ProcessClose("7zG.exe"), ProcessWaitClose("7zG.exe")
             if this.HasOwnProp("tmpDir")
-                this.RecycleItem(this.tmpDir, true)
+                this.RecycleItem(this.tmpDir, A_LineNumber, true)
             IniWrite("", ini, "temp", "guiShow")
             ExitApp
         }
@@ -660,7 +613,7 @@ class SmartZip
         }
     }
 
-    RecycleItem(souce, delete := false)
+    RecycleItem(souce, lineNum, delete := false)
     {
         try
         {
@@ -668,19 +621,33 @@ class SmartZip
                 DirExist(souce) ? DirDelete(souce, 1) : FileDelete(souce)
             else
                 FileRecycle(souce)
-            this.Loging(souce, 5)
+            this.Loging(souce, lineNum, 1)
         }
     }
 
-    MoveItem(souce, dest, isdir)
+    MoveItem(souce, dest, isdir, lineNum)
     {
         try
         {
-            (isDir ? DirMove : FileMove)(souce, oPath := PathDupl(dest, isDir))
-            this.Loging(souce " <--> " oPath, 4)
+            (isDir ? DirMove : FileMove)(souce, oPath := PathDupl())
+            this.Loging(souce " <--> " oPath, lineNum, 2)
             return oPath
         } catch
             return souce
+
+        PathDupl()
+        {
+            if FileExist(dest)
+            {
+                SplitPath(dest, , &dir, &ext, &nameNoext)
+                if isdir && ext
+                    nameNoext := RegExReplace(dest, ".*\\")
+                ext := (isdir || !ext) ? "" : "." ext
+                while FileExist(dest)
+                    dest := dir '\' nameNoext '_' A_Index ext
+            }
+            return dest
+        }
     }
 
     IsArchive(ext)
@@ -758,43 +725,53 @@ class SmartZip
                 this.IniReadLoop(what "CheckSuccessExp", checkSave.successExp, , true)
             }
             check := objCloneMap(checkSave)
+            this.isCmdReturn := false
         } else if line
         {
+            if this.isCmdReturn
+                return
+
+            if this.cmdLog
+            {
+                static cmdobj := FileOpen("__SmartZipCmdLog.txt", "a", "UTF-8")
+                cmdobj.WriteLine("[" what "]`n" line)
+            }
+
             for i in check.errorrContinueExp
                 if line ~= i && --check.errorrContinueExp[i] < 1
-                    return (this.continue := true, LogAndReturn(1))
+                    return (this.continue := true, LogAndReturn(1, A_LineNumber))
 
             for i in check.error
                 if InStr(line, i) && --check.error[i] < 1
-                    return LogAndReturn(2)
+                    return LogAndReturn(2, A_LineNumber)
 
             for i in check.errorExp
                 if line ~= i && --check.errorExp[i] < 1
-                    return LogAndReturn(3)
+                    return LogAndReturn(3, A_LineNumber)
 
             for i in check.success
                 if InStr(line, i) && --check.success[i] < 1
-                    return LogAndReturn(4)
+                    return LogAndReturn(4, A_LineNumber)
 
             for i in check.successExp
                 if line ~= i && --check.successExp[i] < 1
-                    return LogAndReturn(5)
+                    return LogAndReturn(5, A_LineNumber)
 
             if whatSave = "unZip"
             {
                 if (line ~= "^ +[1-9]+%") && !(line ~= "^ +[1-9]+%.+Open$" || line ~= "^ +[1-9]+%$")
-                    return LogAndReturn(6)
+                    return LogAndReturn(6, A_LineNumber)
             }
 
-            LogAndReturn(num)
+            LogAndReturn(num, lineNum)
             {
+                this.isCmdReturn := true
                 ProcessClose(this.CMDPID), ProcessWaitClose(this.CMDPID)
                 if num < 4
                     this.error := 1
-                else if num > 3
+                else
                     this.error := 0
-
-                this.Loging(what "<-->" line, this.error ? 3 : 2)
+                this.Loging(what "<-->" line, lineNum, this.error ? 3 : 4)
             }
         }
 
@@ -807,23 +784,24 @@ class SmartZip
         }
     }
 
-    ; 正常记录/命令行正确/命令行错误/重命名/删除   0,1,2,3,4,5
-    Loging(log, level)
+    ; 关闭0/删除1/重命名2/命令行错误3/命令行正确4/其他5
+    Loging(log, lineNum, level := 5)
     {
-        if level > this.logLevel
+        if !this.logLevel || level > this.logLevel
             return
-        ; [ms][等级] 信息
+
+        static logObj := FileOpen(A_ScriptDir "\log.txt", "a", "UTF-8")
 
         switch level
         {
-            case 5: msg := "删除"
-            case 4: msg := "重命名"
+            case 5: msg := "其他"
+            case 4: msg := "命令行正确"
             case 3: msg := "命令行错误"
-            case 2: msg := "命令行正确"
-            case 1: msg := "其他"
+            case 2: msg := "重命名"
+            case 1: msg := "删除"
         }
 
-        FileAppend(Format("[{1}] [{2}ms] [{3}]`n{4}`n", msg, A_TickCount - this.now, A_Now, log), A_ScriptDir "\log.txt")
+        logObj.WriteLine(Format("[{1}] [{2}ms] [{3}] [{4}]`n{5}", msg, A_TickCount - this.now, A_Now, lineNum, log))
         this.now := A_TickCount
     }
 
@@ -831,137 +809,119 @@ class SmartZip
 
 IniCreate()
 {
-    if FileExist(ini)
-        return
 
-    FileAppend(
-        "; 首先按照示例在 7zipDir 设置 7zip 所在文件夹`n"
-        "; 在password下清空所有密码,然后添加常用密码`n"
-        "; 名称后面为Exp的表示其为正则表达式`n"
-        "; 如有一项右键菜单启用则会在关闭ini文件时弹出右键关联界面`n"
+    iniExist := FileExist(ini)
+    version := IniRead(ini, "other", "version", "2.0")
+    iniEx := A_ScriptDir "`\ini说明.txt"
 
-        "`n; hideRunSize 当文件大小小于指定大小时不显示界面,无干扰但稍慢(0-100ms) 单位MB`n"
-        "; successPercent 用于判断是否解压成功的文件大小百分比,如果解压后大小大于源文件成功,如下设其为 10`n"
-        "; 源文件大小 - 解压后大小 > 源文件*10% 则代表解压成功,否则代表解压失败(删除解压后的文件)`n"
-        "; delSource 解压后删除源文件 1启用 0禁用`n"
-        "; delWhenHasPass 只删除包含密码的源文件`n"
-        "; 嵌套压缩包总是会被删除`n"
-        "; logLevel 日志等级0-5 依次为 禁用日志记录,正常记录,命令行正确,命令行错误,重命名,删除`n"
-        "; icon 右键菜单以及界面的图标"
+    if !iniExist
+    {
+        IniWrite(A_ScriptDir "\7-zip", ini, "set", "7zipDir")
 
-        "`n; 在ext下设置可能为压缩包的后缀名`n"
-        "; 在extForOpen设置后缀名用于作为压缩包打开此类文件`n"
+        IniWrite("10", ini, "set", "successPercent")
+        IniWrite("0", ini, "set", "delSource")
+        IniWrite("0", ini, "set", "delWhenHasPass")
+        IniWrite("5", ini, "set", "logLevel")
+        IniWrite(A_ScriptDir "\ico.ico", ini, "set", "icon")
 
-        "`n; 以下为解压后的处理`n"
-        "; renameExt mp+3<--->mp3 当后缀名 = mp+3 时, 将其改为 mp3,`n"
-        "; renameExt 666666-<---> 当文件名包含 666666-<---> 时 将其替换为 空 `n"
-        "; renameExp ^[ 	]+<---> 正则表达式, 将文件名最开始空格 其替换为 空 `n"
-        "; deleteName等规则同上,符合时删除`n"
+        IniWrite("123456", ini, "password", "1")
+        IniWrite("666888", ini, "password", "2")
+        IniWrite("1024", ini, "password", "3")
+        IniWrite("++", ini, "password", "4")
+        IniWrite("", ini, "password", "5")
+        IniWrite("", ini, "password", "6")
+        IniWrite("", ini, "password", "7")
 
-        "`n; unZipCheck 用于检测文件是否能被解压,匹配Success时自动解压,匹配Error时会弹出密码输入框,匹配ContinueExP时会跳过此文件`n"
-        "; openZip 用于检测文件能否被当作压缩文件打开,匹配Success时会用7zip打开当前文件,匹配Error时会弹出新建压缩文件的菜单`n"
-        "; 示例 ERROR:<--->10 表示匹配10次 ERROR: 时会生效, ERROR:<--->1 匹配到时会立即生效`n"
-        "; 一般将其设为1,只有在后续信息会在它之后出现时才需要设置次数,比方说 Cannot open the file as archive 就会在 ERROR: 后出现`n "
+        IniWrite("zip", ini, "ext", "1")
+        IniWrite("rar", ini, "ext", "2")
+        IniWrite("7z", ini, "ext", "3")
+        IniWrite("001", ini, "ext", "4")
+        IniWrite("cab", ini, "ext", "5")
+        IniWrite("bz2", ini, "ext", "6")
+        IniWrite("gz", ini, "ext", "7")
+        IniWrite("gzip", ini, "ext", "8")
+        IniWrite("tar", ini, "ext", "9")
 
-        "`n; 如果序号后面为空则不会继续读取, 比方说此时在 7 设置密码也没用`n"
-        "; 序号不够请在下文按照数字递增添加,比方说 8,9,10...`n"
+        IniWrite("^\d+$", ini, "extExp", "1")
+        IniWrite("zi", ini, "extExp", "2")
+        IniWrite("7", ini, "extExp", "3")
+        IniWrite("z", ini, "extExp", "4")
 
-        "`n; 7z下设定默认的命令行参数,openAdd 用于打开时的参数, addZip 用于自动压缩的默认参数`n"
-        "; 文件名只能修改后缀名 .zip`" 其他参数可自定义 `n"
+        IniWrite("iso", ini, "extForOpen", "1")
+        IniWrite("apk", ini, "extForOpen", "2")
+        IniWrite("wim", ini, "extForOpen", "3")
+        IniWrite("exe", ini, "extForOpen", "4")
 
-        "`n; menu 用于右键菜单开启,0禁用,1启用,带Name的用于修改右键菜单名`n"
-        "; 由于右键菜单单次只能传递一个文件,传递多文件过于复杂`n"
-        "; 目前方法为在当前窗口发送 复制(Ctrl+C) 快捷键,可能会扰乱剪贴板`n "
-        "; 右键菜单有15个文件限制,解除限制访问下方URL`n"
-        "; https://docs.microsoft.com/zh-cn/troubleshoot/windows-client/shell-experience/context-menus-shortened-select-over-15-files`n"
+        IniWrite("mp+3<--->mp3", ini, "renameExt", "1")
 
-        "`n`n"
-        , ini)
+        IniWrite("666666-<--->", ini, "renameName", "1")
 
-    IniWrite(A_ScriptDir "\7-zip", ini, "set", "7zipDir")
-    IniWrite("10", ini, "set", "hideRunSize")
-    IniWrite("10", ini, "set", "successPercent")
-    IniWrite("0", ini, "set", "delSource")
-    IniWrite("0", ini, "set", "delWhenHasPass")
-    IniWrite("5", ini, "set", "logLevel")
-    IniWrite(A_ScriptDir "\ico.ico", ini, "set", "icon")
+        IniWrite("^[ 	]+<--->", ini, "renameExp", "1")
 
-    IniWrite("123456", ini, "password", "1")
-    IniWrite("666888", ini, "password", "2")
-    IniWrite("1024", ini, "password", "3")
-    IniWrite("++", ini, "password", "4")
-    IniWrite("", ini, "password", "5")
-    IniWrite("", ini, "password", "6")
-    IniWrite("", ini, "password", "7")
+        IniWrite("", ini, "deleteExt", "1")
 
-    IniWrite("zip", ini, "ext", "1")
-    IniWrite("rar", ini, "ext", "2")
-    IniWrite("7z", ini, "ext", "3")
-    IniWrite("001", ini, "ext", "4")
-    IniWrite("cab", ini, "ext", "5")
-    IniWrite("bz2", ini, "ext", "6")
-    IniWrite("gz", ini, "ext", "7")
-    IniWrite("gzip", ini, "ext", "8")
-    IniWrite("tar", ini, "ext", "9")
+        IniWrite("来自666666.org", ini, "deleteName", "1")
+        IniWrite("关注666666网.txt", ini, "deleteName", "2")
+        IniWrite("扫码关注公众号.jpg", ini, "deleteName", "3")
+        IniWrite("前往_666666", ini, "deleteName", "4")
+        IniWrite("自行添加文件后缀.7z.txt", ini, "deleteName", "5")
 
-    IniWrite("^\d+$", ini, "extExp", "1")
-    IniWrite("zi", ini, "extExp", "2")
-    IniWrite("7", ini, "extExp", "3")
-    IniWrite("z", ini, "extExp", "4")
+        IniWrite("", ini, "deleteExp", "1")
 
-    IniWrite("iso", ini, "extForOpen", "1")
-    IniWrite("apk", ini, "extForOpen", "2")
-    IniWrite("wim", ini, "extForOpen", "3")
-    IniWrite("exe", ini, "extForOpen", "4")
+        IniWrite("Wrong password<--->1", ini, "unZipCheckError", "1")
+        IniWrite("ERROR:<--->10", ini, "unZipCheckError", "2")
+        IniWrite("No files to process<--->1", ini, "unZipCheckError", "3")
+        IniWrite("Cannot open encrypted archive<--->1", ini, "unZipCheckError", "4")
 
-    IniWrite("mp+3<--->mp3", ini, "renameExt", "1")
+        IniWrite("", ini, "unZipCheckErrorExp", "1")
 
-    IniWrite("666666-<--->", ini, "renameName", "1")
+        IniWrite("Cannot open the file as archive<--->1", ini, "unZipCheckErrorContinueExP", "1")
 
-    IniWrite("^[ 	]+<--->", ini, "renameExp", "1")
+        IniWrite("Everything is Ok<--->1", ini, "unZipCheckSuccess", "1")
 
-    IniWrite("", ini, "deleteExt", "1")
+        IniWrite("", ini, "unZipCheckSuccessExp", "1")
 
-    IniWrite("来自666666.org", ini, "deleteName", "1")
-    IniWrite("关注666666网.txt", ini, "deleteName", "2")
-    IniWrite("扫码关注公众号.jpg", ini, "deleteName", "3")
-    IniWrite("前往_666666", ini, "deleteName", "4")
-    IniWrite("自行添加文件后缀.7z.txt", ini, "deleteName", "5")
+        IniWrite("ERROR:<--->1", ini, "openZipCheckError", "1")
 
-    IniWrite("", ini, "deleteExp", "1")
+        IniWrite("", ini, "openZipCheckErrorExp", "1")
 
-    IniWrite("Wrong password<--->1", ini, "unZipCheckError", "1")
-    IniWrite("ERROR:<--->10", ini, "unZipCheckError", "2")
-    IniWrite("No files to process<--->1", ini, "unZipCheckError", "3")
-    IniWrite("Cannot open encrypted archive<--->1", ini, "unZipCheckError", "4")
+        IniWrite("Enter password (will not be echoed):<--->1", ini, "openZipCheckSuccess", "1")	;需要输入密码则可能是压缩文件
 
-    IniWrite("", ini, "unZipCheckErrorExp", "1")
+        IniWrite("\d*-\d*-\d* *\d*:\d*:\d* *\d* *\d* *(\d*) files(, (\d*) folders)?<--->1", ini, "openZipCheckSuccessExp", "1")	;多少个文件多少个文件夹则可能是压缩文件
 
-    IniWrite("Cannot open the file as archive<--->1", ini, "unZipCheckErrorContinueExP", "1")
+        IniWrite('.zip" -tzip -mx=0 -aou -ad', ini, "7z", "openAdd")
+        IniWrite('.zip" -aou', ini, "7z", "add")
 
-    IniWrite("Everything is Ok<--->1", ini, "unZipCheckSuccess", "1")
+        IniWrite("1", ini, "menu", "openZip")
+        IniWrite("用7-Zip打开", ini, "menu", "openZipName")
+        IniWrite("1", ini, "menu", "unZip")
+        IniWrite("智能解压", ini, "menu", "unZipName")
+        IniWrite("1", ini, "menu", "addZip")
+        IniWrite("压缩", ini, "menu", "addZipName")
+    }
 
-    IniWrite("", ini, "unZipCheckSuccessExp", "1")
+    if !iniExist || VersionsCompare("2.10")
+    {
+        IniWrite("1", ini, "set", "muiltNesting")
+        IniWrite("10", ini, "set", "hideRunSize")
+        IniWrite("0", ini, "set", "cmdLog")
+    }
 
-    IniWrite("ERROR:<--->1", ini, "openZipCheckError", "1")
-
-    IniWrite("", ini, "openZipCheckErrorExp", "1")
-
-    IniWrite("Enter password (will not be echoed):<--->1", ini, "openZipCheckSuccess", "1")	;需要输入密码则可能是压缩文件
-
-    IniWrite("\d*-\d*-\d* *\d*:\d*:\d* *\d* *\d* *(\d*) files(, (\d*) folders)?<--->1", ini, "openZipCheckSuccessExp", "1")	;多少个文件多少个文件夹则可能是压缩文件
-
-    IniWrite('.zip" -tzip -mx=0 -aou -ad', ini, "7z", "openAdd")
-    IniWrite('.zip" -aou', ini, "7z", "add")
-
-    IniWrite("1", ini, "menu", "openZip")
-    IniWrite("用7-Zip打开", ini, "menu", "openZipName")
-    IniWrite("1", ini, "menu", "unZip")
-    IniWrite("智能解压", ini, "menu", "unZipName")
-    IniWrite("1", ini, "menu", "addZip")
-    IniWrite("压缩", ini, "menu", "addZipName")
+    if !iniExist || VersionsCompare("2.10")
+        IniWrite("2.10", ini, "other", "version")
 
     IniSetting
+
+    VersionsCompare(str)
+    {
+        if str = version
+            return false
+        if RegExReplace(str, "\..*") < RegExReplace(version, "\..*")
+            return true
+        if RegExReplace(str, ".+?\.") > RegExReplace(version, ".+?\.")
+            return true
+    }
+
 }
 
 IniSetting()
@@ -983,4 +943,62 @@ IniSetting()
         else
             ToolTip
     }
+}
+
+ContextMenu()
+{
+    openZip := IniRead(ini, "menu", "openZip", "")
+    unZip := IniRead(ini, "menu", "unZip", "")
+    addZip := IniRead(ini, "menu", "addZip", "")
+
+    if !openZip && !unZip && !addZip
+        return
+
+    keyPath := "HKCU\SOFTWARE\Classes\AllFilesystemObjects\shell"
+
+    answer := MsgBox("`t点击是注册右键菜单,否删除右键菜单,取消退出`t", "SmartZip", "YNC")
+    if answer = "Yes"
+    {
+        menuPath := A_ScriptDir "\Contextmenu"
+
+        if FileExist(menuPath ".ahk")
+            menuPath := '"' A_AhkPath '" "' menuPath '.ahk" '
+        else if FileExist(menuPath ".exe")
+            menuPath := '"' menuPath '.exe" '
+        else
+            MsgBox("右键菜单所需要文件不存在"), ExitApp()
+
+        if openZip
+        {
+            RegWrite(icon, "REG_SZ", keyPath "\OpenZip", "Icon")
+            RegWrite(IniRead(ini, "menu", "openZipName"), "REG_SZ", keyPath "\OpenZip")
+            RegWrite(menuPath "o", "REG_SZ", keyPath "\OpenZip\command")
+        }
+
+        if unZip
+        {
+            RegWrite(icon, "REG_SZ", "HKCU\SOFTWARE\Classes\*\shell\UnZip", "Icon")
+            RegWrite(IniRead(ini, "menu", "unZipName"), "REG_SZ", "HKCU\SOFTWARE\Classes\*\shell\UnZip")
+            RegWrite(menuPath "x", "REG_SZ", "HKCU\SOFTWARE\Classes\*\shell\UnZip\command")
+        }
+
+        if addZip
+        {
+            RegWrite(icon, "REG_SZ", keyPath "\AddZip", "Icon")
+            RegWrite(IniRead(ini, "menu", "addZipName"), "REG_SZ", keyPath "\AddZip")
+            RegWrite(menuPath "a", "REG_SZ", keyPath "\AddZip\command")
+        }
+
+        TrayTip("已注册右键菜单", "SmartZip")
+        ToolTip("已注册右键菜单")
+
+    } else if answer = "No"
+    {
+        try RegDeleteKey(keyPath "\OpenZip")
+        try RegDeleteKey("HKCU\SOFTWARE\Classes\*\shell\UnZip")
+        try RegDeleteKey(keyPath "\AddZip")
+        TrayTip("右键菜单已删除", "SmartZip")
+        ToolTip("右键菜单已删除")
+    }
+    Sleep(2000)
 }
