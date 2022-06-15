@@ -4,21 +4,19 @@
 ;@Ahk2Exe-SetCompanyName  viv
 ;@Ahk2Exe-SetOrigFilename SmartZip.exe
 ;@Ahk2Exe-SetMainIcon     ico.ico
-;@Ahk2Exe-SetFileVersion 2.13
-;@Ahk2Exe-SetProductVersion %A_AhkVersion%
+;@Ahk2Exe-SetFileVersion 2.14
+;@Ahk2Exe-SetProductVersion 12
 ;@Ahk2Exe-ExeName SmartZip.exe
-currentVersion := 11
+currentVersion := 12
 
 #SingleInstance off
 #NoTrayIcon
 
 ini := A_ScriptDir "\SmartZip.ini"
 IniCreate
-
 zip := SmartZip(RelativePath(IniRead(ini, "set", "7zipDir", "")))
 
 ;https://www.iconfont.cn/collections/detail?spm=a313x.7781069.0.da5a778a4&cid=24599
-
 if !FileExist(icon := RelativePath(IniRead(ini, "set", "icon", "")))
     icon := zip.7zFM
 
@@ -29,7 +27,7 @@ if A_Args.Length
 else
 {
     IniSetting
-    ContextMenu
+    ContextMenuOrSendTo
 }
 
 ExitApp
@@ -110,7 +108,7 @@ class SmartZip
         this.IniReadLoop("password", this.password)
         this.succesSpercent := IniRead(ini, "set", "succesSpercent", 0)
         this.successMinSize := IniRead(ini, "set", "successMinSize", 0)
-        this.addCurrentDir2Pass := IniRead(ini, "personalized", "addCurrentDir2Pass", false)
+        addCurrentDir2Pass := IniRead(ini, "personalized", "addCurrentDir2Pass", false)
 
         ;批量解压文件中某项为嵌套压缩包时不显示7zip界面
         guiShow := IniRead(ini, "temp", "guiShow", "")
@@ -971,7 +969,11 @@ IniCreate()
         IniWrite("10", ini, "set", "successMinSize")
 
     if VersionsCompare(12)
+    {
+        IniWrite("1", ini, "menu", "contextMenu")
+        IniWrite("1", ini, "menu", "sendTo")
         IniWrite("0", ini, "personalized", "addCurrentDir2Pass")
+    }
 
     if VersionsCompare(currentVersion)
         IniWrite(currentVersion, ini, "set", "version")
@@ -995,62 +997,118 @@ IniSetting()
     fn() => WinExist("SmartZip.ini") && WinActive() ? ToolTip("设置完 ini 后会继续运行", 0, 0) : ToolTip()
 }
 
-ContextMenu()
-{
-    openZip := IniRead(ini, "menu", "openZip", "")
-    unZip := IniRead(ini, "menu", "unZip", "")
-    addZip := IniRead(ini, "menu", "addZip", "")
+RelativePath(str) => StrReplace(str, "%SmartZipDir%", A_ScriptDir)
 
-    if !openZip && !unZip && !addZip
+ContextMenuOrSendTo()
+{
+
+    isContext := IniRead(ini, "menu", "contextMenu", "")
+    isSend := IniRead(ini, "menu", "sendTo", "")
+    if !isContext && !isSend
         return
 
-    keyPath := "HKCU\SOFTWARE\Classes\AllFilesystemObjects\shell"
+    openZipName := IniRead(ini, "menu", "openZipName", "")
+    unZipName := IniRead(ini, "menu", "unZipName", "")
+    addZipName := IniRead(ini, "menu", "addZipName", "")
 
-    answer := MsgBox("`t点击是注册右键菜单,否删除右键菜单,取消退出`t", "SmartZip", "YNC")
-    if answer = "Yes"
+    set := Gui(, "SmartZip")
+    set.SetFont(, "Segoe UI")
+    set.BackColor := "FFFFFF"
+    set.Add("GroupBox", "xm ym+10  Section  w200 h180", "右键菜单").GetPos(&x, &y, &w, &h)
+    x1 := set.Add('Checkbox', "xs+10 ys+20 r2 Checked" isContext, unZipName)
+    o1 := set.Add('Checkbox', "r2 Checked" isContext, openZipName)
+    a1 := set.Add('Checkbox', "r2 Checked" isContext, addZipName)
+    set.Add('Button', , "注册").OnEvent("Click", (*) => ContextMenu(x1.Value, o1.Value, a1.Value))
+
+    set.Add("GroupBox", " Section  w200 h180 x" x + w + 10 ' y' y, "发送到菜单")
+    x2 := set.Add('Checkbox', "xs+10 ys+20 r2 Checked" isSend, unZipName)
+    o2 := set.Add('Checkbox', "r2 Checked" isSend, openZipName)
+    a2 := set.Add('Checkbox', "r2 Checked" isSend, addZipName)
+    set.Add('Button', , "注册").OnEvent("Click", (*) => SendTo(x2.Value, o2.Value, a2.Value))
+    set.Show()
+    set.OnEvent("Close", (*) => ExitApp())
+    set.OnEvent("Escape", (*) => ExitApp())
+    ; set.OnEvent("DropFiles", (*) => ExitApp())
+    Pause
+
+    SendTo(x, o, a)
     {
-        menuPath := A_ScriptDir "\Contextmenu"
+        sendToDir := A_StartMenu "/../SendTo/"
+        openZipLnk := sendToDir openZipName ".lnk"
+        unZipNameLnk := sendToDir unZipName ".lnk"
+        addZipNameLnk := sendToDir addZipName ".lnk"
 
-        if FileExist(menuPath ".ahk")
-            menuPath := '"' A_AhkPath '" "' menuPath '.ahk" '
-        else if FileExist(menuPath ".exe")
-            menuPath := '"' menuPath '.exe" '
+        if x
+            CreateLnk(unZipNameLnk, "x")
         else
-            MsgBox("右键菜单所需要文件不存在"), ExitApp()
+            try FileDelete(unZipNameLnk)
+        if o
+            CreateLnk(openZipLnk, "o")
+        else
+            try FileDelete(openZipLnk)
+        if a
+            CreateLnk(addZipNameLnk, "a")
+        else
+            try FileDelete(addZipNameLnk)
 
-        if openZip
+        if x || o || a
+            MsgBox("已注册发送到菜单")
+        else
+            MsgBox("已删除发送到菜单")
+
+        CreateLnk(lnk, to)
         {
-            RegWrite(icon, "REG_SZ", keyPath "\OpenZip", "Icon")
-            RegWrite(IniRead(ini, "menu", "openZipName"), "REG_SZ", keyPath "\OpenZip")
-            RegWrite(menuPath "o", "REG_SZ", keyPath "\OpenZip\command")
+            if !FileExist(lnk) || (FileGetShortcut(lnk, &target, , &args), target != A_ScriptFullPath || args != to)
+            {
+                try
+                    FileDelete(lnk)
+                FileCreateShortcut(A_ScriptFullPath, lnk, , to)
+            }
+        }
+    }
+
+    ContextMenu(x, o, a)
+    {
+
+        keyPath := "HKCU\SOFTWARE\Classes\AllFilesystemObjects\shell"
+
+        if x || o || a
+        {
+            menuPath := A_ScriptDir "\Contextmenu"
+            if FileExist(menuPath ".ahk")
+                menuPath := '"' A_AhkPath '" "' menuPath '.ahk" '
+            else if FileExist(menuPath ".exe")
+                menuPath := '"' menuPath '.exe" '
+            else
+                MsgBox("右键菜单所需要文件不存在"), ExitApp()
         }
 
-        if unZip
+        if x
         {
             RegWrite(icon, "REG_SZ", "HKCU\SOFTWARE\Classes\*\shell\UnZip", "Icon")
-            RegWrite(IniRead(ini, "menu", "unZipName"), "REG_SZ", "HKCU\SOFTWARE\Classes\*\shell\UnZip")
+            RegWrite(unZipName, "REG_SZ", "HKCU\SOFTWARE\Classes\*\shell\UnZip")
             RegWrite(menuPath "x", "REG_SZ", "HKCU\SOFTWARE\Classes\*\shell\UnZip\command")
-        }
+        } else
+            try RegDeleteKey("HKCU\SOFTWARE\Classes\*\shell\UnZip")
 
-        if addZip
+        if o
+        {
+            RegWrite(icon, "REG_SZ", keyPath "\OpenZip", "Icon")
+            RegWrite(openZipName, "REG_SZ", keyPath "\OpenZip")
+            RegWrite(menuPath "o", "REG_SZ", keyPath "\OpenZip\command")
+        } else
+            try RegDeleteKey(keyPath "\OpenZip")
+        if a
         {
             RegWrite(icon, "REG_SZ", keyPath "\AddZip", "Icon")
-            RegWrite(IniRead(ini, "menu", "addZipName"), "REG_SZ", keyPath "\AddZip")
+            RegWrite(addZipName, "REG_SZ", keyPath "\AddZip")
             RegWrite(menuPath "a", "REG_SZ", keyPath "\AddZip\command")
-        }
+        } else
+            try RegDeleteKey(keyPath "\AddZip")
 
-        TrayTip("已注册右键菜单", "SmartZip")
-        ToolTip("已注册右键菜单")
-
-    } else if answer = "No"
-    {
-        try RegDeleteKey(keyPath "\OpenZip")
-        try RegDeleteKey("HKCU\SOFTWARE\Classes\*\shell\UnZip")
-        try RegDeleteKey(keyPath "\AddZip")
-        TrayTip("右键菜单已删除", "SmartZip")
-        ToolTip("右键菜单已删除")
+        if x || o || a
+            MsgBox("已注册右键")
+        else
+            MsgBox("已删除右键")
     }
-    Sleep(2000)
 }
-
-RelativePath(str) => StrReplace(str, "%SmartZipDir%", A_ScriptDir)

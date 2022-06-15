@@ -33,6 +33,11 @@
        - 目前方法为在当前窗口发送 复制(Ctrl+C) 快捷键,可能会扰乱剪贴板
        -  右键菜单有15个文件限制,解除限制访问下方链接按说明操作
           - [context-menus-shortened-select-over-15-files](https://docs.microsoft.com/zh-cn/troubleshoot/windows-client/shell-experience/context-menus-shortened-select-over-15-files)
+ - 右键发送到菜单 **2.14+**
+    - 不影响剪贴板
+    - 不受15个文件限制影响
+    - 如使用资源管理器可用此代替
+    - 缺点是在二级目录里
  - 通过直接传递参数运行(推荐但比较繁杂)
    - 智能解压: `SmartZip.exe  x  file1 file2 file3 ....`
    - 使用7-zip打开: `SmartZip.exe  o  file1`
@@ -54,14 +59,17 @@
  - **更新版本建议备份 ini以防出错**
 
 ## 预览图
- - 右键关联界面
+ - 右键及发送到注册界面
 
-![2](https://user-images.githubusercontent.com/2145741/173320542-65ccfbbe-8e5a-4e97-80b0-a19f36a8881f.jpg)
+![1](https://user-images.githubusercontent.com/2145741/173806126-bfdce216-7f43-4c81-8dae-506ae0d1c543.jpg)
 
  - 资源管理器右键界面
 
-![3](https://user-images.githubusercontent.com/2145741/173320643-509a43e2-fb9f-4ca5-981f-c99b7f020f1e.jpg)
+![2](https://user-images.githubusercontent.com/2145741/173320643-509a43e2-fb9f-4ca5-981f-c99b7f020f1e.jpg)
 
+ - 发送到界面
+
+![3](https://user-images.githubusercontent.com/2145741/173808930-bcce4273-c930-4e84-9a40-c52349760fc0.jpg)
 
  - 批量解压界面
 

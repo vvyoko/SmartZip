@@ -54,12 +54,14 @@
 | 1,2,3...  | openZipCheckSuccessExp | 2.0(0) | ... | 同上
 | openAdd  | 7z | 2.0(0) | .zip" -tzip -mx=0 -aou -ad | 7-zip新建压缩包默认参数 | 执行`o`时(用7-zip打开非压缩文件)
 | add  | 7z | 2.0(0) | .zip" -tzip -mx=0 -aou -ad | 压缩默认参数 | 执行`a`时(压缩)
-| openZip  | menu | 2.0(0) | 1 | 启用`o`右键菜单
+| ~~openZip~~ | 2.14(12) 移除
 | openZipName  | menu | 2.0(0) | 用7-Zip打开 | `o`右键菜单名称
-| unZip  | menu | 2.0(0) | 1 | 启用`x`右键菜单
+| ~~unZip~~ | 2.14(12) 移除
 | unZipName  | menu | 2.0(0) | 智能解压 | `x`右键菜单名称
-| addZip  | menu | 2.0(0) | 1 | 启用`a`右键菜单
+| ~~addZip~~ | 2.14(12) 移除
 | addZipName  | menu | 2.0(0) | 压缩 | `a`右键菜单名称
+| contextMenu  | menu | 2.14(12) | 1 | 启用提示注册右键 | 只会影响注册界面的默认选中状态
+| sendTo  | menu | 2.14(12) | 1 | 启用提示注册发送到菜单 | 两项启用一项即可显示注册界面
 | isLoop  | temp | 2.0(0) |  | 正在解压嵌套文件 | 无需理会
 | guiShow  | temp | 2.0(0) |  | GUI显示状态 | 无需理会
 | addCurrentDir2Pass | personalized | 2.14(12) | 0 | 启用把当前文件夹名称加入密码列表 | 此节一般是特殊需求,一般无需理会
