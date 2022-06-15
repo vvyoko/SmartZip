@@ -19,7 +19,7 @@ zip := SmartZip(IniRead(ini, "set", "7zipDir", ""))
 ;https://www.iconfont.cn/collections/detail?spm=a313x.7781069.0.da5a778a4&cid=24599
 
 if !FileExist(icon := IniRead(ini, "set", "icon", ""))
-    icon := zip.7zG
+    icon := zip.7zFM
 
 TraySetIcon(icon)
 
@@ -103,11 +103,12 @@ class SmartZip
 
     Unzip()
     {
-        this.password := ["", FormatPassword(A_Clipboard), IniRead(ini, "temp", "lastPass", "")]
+        this.password := ["", FormatPassword(A_Clipboard), IniRead(ini, "password", "lastPass", "")]
         this.delSource := IniRead(ini, "set", "delSource", 0)
         this.delWhenHasPass := IniRead(ini, "set", "delWhenHasPass", 0)
         this.IniReadLoop("password", this.password)
         this.succesSpercent := IniRead(ini, "set", "succesSpercent", 0)
+        this.successMinSize := IniRead(ini, "set", "successMinSize", 0)
 
         ;批量解压文件中某项为嵌套压缩包时不显示7zip界面
         guiShow := IniRead(ini, "temp", "guiShow", "")
@@ -189,7 +190,7 @@ class SmartZip
             this.Loging("解压嵌套 <--> " path, A_LineNumber)
             IniWrite("", ini, "temp", "isLoop")
 
-            if FileGetTime(path) = time && FileGetSize(path) = size
+            if FileExist(path) && FileGetTime(path) = time && FileGetSize(path) = size
                 this.RecycleItem(path, A_LineNumber)	;删除嵌套文件
         }
 
@@ -210,7 +211,7 @@ class SmartZip
                 if !this.error
                 {
                     if i
-                        IniWrite(i, ini, "temp", "lastPass"), pass := ' -p"' i '"'
+                        IniWrite(i, ini, "password", "lastPass"), pass := ' -p"' i '"'
                     break
                 }
             }
@@ -218,10 +219,7 @@ class SmartZip
 
             if !this.error	;密码正确或无需密码
             {
-                if hideBool
-                    RunWait(this.7z ' x "' path '" -aou -o' tmpDir pass, , "hide")
-                else
-                    RunWait(this.7zG ' x "' path '" -aou -o' tmpDir pass, , this.guiShow || guiShow ? "hide" : "")
+                this.Run7z(hideBool, 'x', path, '" -aou -o' tmpDir pass, hideBool || this.guiShow || guiShow, () => IsSuccess(), A_LineNumber)
 
                 if IsSuccess()
                 {
@@ -232,7 +230,7 @@ class SmartZip
                 }
             } else	;密码错误需手动输入密码
             {
-                RunWait(this.7zG ' x "' path '" -aou -o' tmpDir)
+                this.Run7z(false, 'x', path, '" -aou -o' tmpDir, , () => IsSuccess(), A_LineNumber)
                 if IsSuccess() && this.delSource
                     this.RecycleItem(path, A_LineNumber)
             }
@@ -241,20 +239,18 @@ class SmartZip
             {
                 if !DirExist(tmpDir)
                     return false
-                isTrue := ""
+
+                if this.size < this.successMinSize *1024
+                    return true
+
                 folderSize := ComObject("Scripting.FileSystemObject").GetFolder(tmpDir).Size
 
                 this.Loging("文件大小: " folderSize " 临时文件夹大小: " this.size, A_LineNumber)
                 if folderSize >= this.size
-                    isTrue := true
-                else if this.size - folderSize <= this.size / 100 * this.succesSpercent
-                    isTrue := true
-
-                if isTrue
-                {
-                    this.Loging("解压 <--> " path, A_LineNumber)
                     return true
-                }
+                else if this.size - folderSize <= this.size / 100 * this.succesSpercent
+                    return true
+
                 this.RecycleItem(tmpDir, A_LineNumber, true)
                 return false
             }
@@ -356,8 +352,7 @@ class SmartZip
             zipname := this.muilt ? StrReplace(RegExReplace(this.dir, ".+\\"), ":") : nameNoExt
             zipname := this.AUO(zipname, RegExReplace(args, '(.+?)".+', "$1"))
 
-            RunWait(this.7zG ' a "' zipname args path)
-
+            this.RunCmd(false, ' a "' zipname args path)
             this.Loging("新建压缩 <--> " path, A_LineNumber)
         }
     }
@@ -385,19 +380,17 @@ class SmartZip
                     this.Gui
 
                 this.index := A_Index
-                RunWait((hideBool ? this.7z : this.7zG) ' a "' this.AUO(RegExReplace(i, ".*\\"), ext) args ' "' i '\*"', , (hideBool || count > 1) ? "hide" : "")
-                this.Loging("压缩 <--> " i, A_LineNumber)
+                this.Run7z(hideBool, 'a', this.AUO(RegExReplace(i, ".*\\"), ext), args ' "' i '\*"', hideBool || count > 1, , A_LineNumber)
             }
             return
 
         } else if this.arr.Length = 1	;单个文件
-            RunWait((hideBool ? this.7z : this.7zG) ' a "' this.AUO(nameNoExt, ext) args ' "' this.arr[1] '"', , hideBool ? "hide" : ""), this.Loging("压缩 <--> " this.arr[1], A_LineNumber)
+            this.Run7z(hideBool, 'a', this.AUO(nameNoExt, ext), args ' "' this.arr[1] '"', hideBool, , A_LineNumber)
         else	;文件文件夹混合
         {
             for i in this.arr
                 path .= ' "' i '" '
-            RunWait((hideBool ? this.7z : this.7zG) ' a "' this.AUO(RegExReplace(this.dir, ".+\\"), ext) args path, , hideBool ? "hide" : "")
-            this.Loging("压缩 <--> " path, A_LineNumber)
+            this.Run7z(hideBool, 'a', this.AUO(RegExReplace(this.dir, ".+\\"), ext), args path, hideBool, , A_LineNumber)
         }
         ; if hideBool
         ;     Send("{F5}")
@@ -430,6 +423,13 @@ class SmartZip
     }
 
     AUO(name, ext) => StrReplace(this.PathDupl(this.dir "\" name ext, 0), ext)
+
+    Run7z(is7z := false, xa := "x", path := "", args := "", hide := false, log := true, linenum := "")
+    {
+        RunWait((is7z ? this.7z : this.7zG) ' ' xa ' "' path args, , hide ? "hide" : "")
+        if log
+            this.Loging((xa = 'x' ? "解压" : "压缩") " <--> " path, linenum)
+    }
 
     Gui()
     {
@@ -854,12 +854,12 @@ class SmartZip
 
 IniCreate()
 {
+    iniExist := !FileExist(ini)
+    version := IniRead(ini, "set", "version", "0")
+    currentVersion := 10
+    VersionsCompare(num) => !iniExist || version < num
 
-    iniExist := FileExist(ini)
-    version := IniRead(ini, "other", "version", "2.0")
-    iniEx := A_ScriptDir "`\ini说明.txt"
-
-    if !iniExist
+    if iniExist
     {
         IniWrite(A_ScriptDir "\7-zip", ini, "set", "7zipDir")
 
@@ -902,6 +902,7 @@ IniCreate()
         IniWrite("666666-<--->", ini, "renameName", "1")
 
         IniWrite("^[ 	]+<--->", ini, "renameExp", "1")
+        IniWrite("[ 	]+$<--->", ini, "renameExp", "1")
 
         IniWrite("", ini, "deleteExt", "1")
 
@@ -945,29 +946,21 @@ IniCreate()
         IniWrite("压缩", ini, "menu", "addZipName")
     }
 
-    if !iniExist || VersionsCompare("2.10")
+    if VersionsCompare(9)
     {
         IniWrite("1", ini, "set", "muiltNesting")
         IniWrite("10", ini, "set", "hideRunSize")
         IniWrite("0", ini, "set", "cmdLog")
     }
 
-    if !iniExist || VersionsCompare("2.11")
-        IniWrite("2.11", ini, "other", "version")
+    if VersionsCompare(10)
+        IniWrite("10", ini, "set", "successMinSize")
+
+    if VersionsCompare(currentVersion)
+        IniWrite(currentVersion, ini, "set", "version")
 
     if !iniExist
         IniSetting
-
-    VersionsCompare(str)
-    {
-        if str = version
-            return false
-        if RegExReplace(str, "\..*") < RegExReplace(version, "\..*")
-            return true
-        if RegExReplace(str, ".+?\.") > RegExReplace(version, ".+?\.")
-            return true
-    }
-
 }
 
 IniSetting()
