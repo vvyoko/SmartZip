@@ -44,21 +44,22 @@
 | 1,2,3...  | deleteName | 2.0(0) | ... | 解压后文件后名`包含` `左`时删除
 | 1,2,3...  | deleteExp | 2.0(0) | ... | 解压后文件名`~=` `左`时删除
 | 1,2,3...  | unZipCheckError | 2.0(0) | `ERROR:<--->10`... | 命令行`匹配` `左` `右`次提示输入密码 | 匹配 `ERROR:` `10` 次
-| 1,2,3...  | unZipCheckErrorExp | 2.0(0) | ... | 命令行`~=` `左` `右`次提示输入密码 | 启用 cmdLog 后可查看命令行
+| 1,2,3...  | unZipCheckErrorExp | 2.0(0) | ... | 命令行`~=` `左` `右`次提示输入密码 | 启用`cmdLog`后可查看命令行
 | 1,2,3...  | unZipCheckErrorContinueExP | 2.0(0) |  | 命令行`~=` `左` `右`次跳过此项 | 它不是压缩包
 | 1,2,3...  | unZipCheckSuccess | 2.0(0) | ... | 命令行`匹配` `左` `右`次解压 | 密码正确或无需密码
-| 1,2,3...  | unZipCheckSuccessExp | 2.0(0) | ... | 命令行`~=` `左` `右`次解压 | 此类型可启用cmdLog查看内容
+| 1,2,3...  | unZipCheckSuccessExp | 2.0(0) | ... | 命令行`~=` `左` `右`次解压 | 此类型可启用`cmdLog`查看内容
 | 1,2,3...  | openZipCheckError | 2.0(0) | ... | 用于打开的判断,同上
 | 1,2,3...  | openZipCheckErrorExp | 2.0(0) | ... | 同上
 | 1,2,3...  | openZipCheckSuccess | 2.0(0) | ... | 同上
 | 1,2,3...  | openZipCheckSuccessExp | 2.0(0) | ... | 同上
-| openAdd  | 7z | 2.0(0) | .zip" -tzip -mx=0 -aou -ad | 7-zip新建压缩包默认参数 | 执行`o`时(用7-zip打开非压缩文件时)
+| openAdd  | 7z | 2.0(0) | .zip" -tzip -mx=0 -aou -ad | 7-zip新建压缩包默认参数 | 执行`o`时(用7-zip打开非压缩文件)
 | add  | 7z | 2.0(0) | .zip" -tzip -mx=0 -aou -ad | 压缩默认参数 | 执行`a`时(压缩)
-| openZip  | menu | 2.0(0) | 1 | 启用 o 右键菜单
-| openZipName  | menu | 2.0(0) | 用7-Zip打开 | o 右键菜单名称
-| unZip  | menu | 2.0(0) | 1 | 启用 x 右键菜单
-| unZipName  | menu | 2.0(0) | 智能解压 | x 右键菜单名称
-| addZip  | menu | 2.0(0) | 1 | 启用 a 右键菜单
-| addZipName  | menu | 2.0(0) | 压缩 | a 右键菜单名称
+| openZip  | menu | 2.0(0) | 1 | 启用`o`右键菜单
+| openZipName  | menu | 2.0(0) | 用7-Zip打开 | `o`右键菜单名称
+| unZip  | menu | 2.0(0) | 1 | 启用`x`右键菜单
+| unZipName  | menu | 2.0(0) | 智能解压 | `x`右键菜单名称
+| addZip  | menu | 2.0(0) | 1 | 启用`a`右键菜单
+| addZipName  | menu | 2.0(0) | 压缩 | `a`右键菜单名称
 | isLoop  | temp | 2.0(0) |  | 正在解压嵌套文件 | 无需理会
 | guiShow  | temp | 2.0(0) |  | GUI显示状态 | 无需理会
+| addCurrentDir2Pass | personalized | 2.14(12) | 0 | 启用把当前文件夹名称加入密码列表 | 此节一般是特殊需求,一般无需理会

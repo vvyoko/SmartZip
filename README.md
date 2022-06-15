@@ -71,3 +71,10 @@
  - 批量压缩界面
 
 ![5](https://user-images.githubusercontent.com/2145741/173320771-15412318-05ef-4158-b01c-4ab828e12ec6.jpg)
+
+
+## 相关链接
+  - [7-zip](https://www.7-zip.org/)
+    - 测试基于 7-Zip 21.07 版本
+  - [小众软件](https://www.appinn.com/smartzip-for-7zip/)
+  - [小众软件发现频道](https://meta.appinn.net/t/topic/33555)

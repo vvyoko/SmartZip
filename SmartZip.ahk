@@ -4,9 +4,10 @@
 ;@Ahk2Exe-SetCompanyName  viv
 ;@Ahk2Exe-SetOrigFilename SmartZip.exe
 ;@Ahk2Exe-SetMainIcon     ico.ico
-;@Ahk2Exe-SetFileVersion 2.12
+;@Ahk2Exe-SetFileVersion 2.13
 ;@Ahk2Exe-SetProductVersion %A_AhkVersion%
 ;@Ahk2Exe-ExeName SmartZip.exe
+currentVersion := 11
 
 #SingleInstance off
 #NoTrayIcon
@@ -109,6 +110,7 @@ class SmartZip
         this.IniReadLoop("password", this.password)
         this.succesSpercent := IniRead(ini, "set", "succesSpercent", 0)
         this.successMinSize := IniRead(ini, "set", "successMinSize", 0)
+        this.addCurrentDir2Pass := IniRead(ini, "personalized", "addCurrentDir2Pass", false)
 
         ;批量解压文件中某项为嵌套压缩包时不显示7zip界面
         guiShow := IniRead(ini, "temp", "guiShow", "")
@@ -124,7 +126,14 @@ class SmartZip
             if this.muilt && !this.guiShow && !hideBool
                 IniWrite(1, ini, "temp", "guiShow"), this.Gui()
 
+            if addCurrentDir2Pass
+            {
+                SplitPath(i, , &dirPassword)
+                this.password.Push(RegExReplace(dirPassword, ".+\\"))
+            }
             zipx(i)
+            if addCurrentDir2Pass
+                this.password.RemoveAt(this.password.Length)
 
             if !DirExist(tmpDir)	;密码错误以及未输入正确密码
                 continue
@@ -861,7 +870,6 @@ IniCreate()
 {
     iniExist := FileExist(ini)
     version := IniRead(ini, "set", "version", "0")
-    currentVersion := 10
     VersionsCompare(num) => !iniExist || version < num
     SmartZipDir := "%SmartZipDir%"
 
@@ -961,6 +969,9 @@ IniCreate()
 
     if VersionsCompare(10)
         IniWrite("10", ini, "set", "successMinSize")
+
+    if VersionsCompare(12)
+        IniWrite("0", ini, "personalized", "addCurrentDir2Pass")
 
     if VersionsCompare(currentVersion)
         IniWrite(currentVersion, ini, "set", "version")
