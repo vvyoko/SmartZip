@@ -4,7 +4,7 @@
 ;@Ahk2Exe-SetCompanyName  viv
 ;@Ahk2Exe-SetOrigFilename SmartZip.exe
 ;@Ahk2Exe-SetMainIcon     ico.ico
-;@Ahk2Exe-SetFileVersion 2.11
+;@Ahk2Exe-SetFileVersion 2.12
 ;@Ahk2Exe-SetProductVersion %A_AhkVersion%
 ;@Ahk2Exe-ExeName SmartZip.exe
 
@@ -14,11 +14,11 @@
 ini := A_ScriptDir "\SmartZip.ini"
 IniCreate
 
-zip := SmartZip(IniRead(ini, "set", "7zipDir", ""))
+zip := SmartZip(RelativePath(IniRead(ini, "set", "7zipDir", "")))
 
 ;https://www.iconfont.cn/collections/detail?spm=a313x.7781069.0.da5a778a4&cid=24599
 
-if !FileExist(icon := IniRead(ini, "set", "icon", ""))
+if !FileExist(icon := RelativePath(IniRead(ini, "set", "icon", "")))
     icon := zip.7zFM
 
 TraySetIcon(icon)
@@ -139,6 +139,13 @@ class SmartZip
                     break
             }
 
+            ;解压后没有文件
+            if !IsSet(count)
+            {
+                this.RecycleItem(tmpDir, A_LineNumber, true)
+                continue
+            }
+
             notDir := 0
             loop files tmpDir "\*.*", "FR"
             {
@@ -183,8 +190,7 @@ class SmartZip
             if !this.IsArchive(ext)
                 return
 
-            time := FileGetTime(path)
-            size := FileGetSize(path)
+            time := FileGetTime(path), size := FileGetSize(path)
             IniWrite(1, ini, "temp", "isLoop")
             RunWait('"' A_ScriptFullPath '" x "' path '"')
             this.Loging("解压嵌套 <--> " path, A_LineNumber)
@@ -225,13 +231,13 @@ class SmartZip
                 {
                     if IniRead(ini, "temp", "isLoop", "")
                         this.RecycleItem(path, A_LineNumber, true)
-                    else if pass && this.delWhenHasPass
+                    else if this.delSource || (pass && this.delWhenHasPass)
                         this.RecycleItem(path, A_LineNumber)
                 }
             } else	;密码错误需手动输入密码
             {
                 this.Run7z(false, 'x', path, '" -aou -o' tmpDir, , () => IsSuccess(), A_LineNumber)
-                if IsSuccess() && this.delSource
+                if IsSuccess() && this.delWhenHasPass
                     this.RecycleItem(path, A_LineNumber)
             }
 
@@ -240,12 +246,11 @@ class SmartZip
                 if !DirExist(tmpDir)
                     return false
 
-                if this.size < this.successMinSize *1024
+                if this.size < this.successMinSize * 1024
                     return true
 
                 folderSize := ComObject("Scripting.FileSystemObject").GetFolder(tmpDir).Size
-
-                this.Loging("文件大小: " folderSize " 临时文件夹大小: " this.size, A_LineNumber)
+                this.Loging("文件大小: " this.size " 临时文件夹大小: " folderSize, A_LineNumber)
                 if folderSize >= this.size
                     return true
                 else if this.size - folderSize <= this.size / 100 * this.succesSpercent
@@ -350,9 +355,9 @@ class SmartZip
             for i in this.arr
                 path .= ' "' i '" '
             zipname := this.muilt ? StrReplace(RegExReplace(this.dir, ".+\\"), ":") : nameNoExt
-            zipname := this.AUO(zipname, RegExReplace(args, '(.+?)".+', "$1"))
 
-            this.RunCmd(false, ' a "' zipname args path)
+            this.Run7z(, 'a', this.AUO(zipname, RegExReplace(args, '(.+?)".*', "$1")), args path, , , A_LineNumber)
+
             this.Loging("新建压缩 <--> " path, A_LineNumber)
         }
     }
@@ -368,7 +373,7 @@ class SmartZip
         hideBool := IsHide()
 
         args := IniRead(ini, "7z", "add")
-        ext := RegExReplace(args, '(.+?)".+', "$1")
+        ext := RegExReplace(args, '(.+?)".*', "$1")
 
         if count = this.arr.Length	;全是文件夹,单独添加
         {
@@ -854,20 +859,21 @@ class SmartZip
 
 IniCreate()
 {
-    iniExist := !FileExist(ini)
+    iniExist := FileExist(ini)
     version := IniRead(ini, "set", "version", "0")
     currentVersion := 10
     VersionsCompare(num) => !iniExist || version < num
+    SmartZipDir := "%SmartZipDir%"
 
-    if iniExist
+    if !iniExist
     {
-        IniWrite(A_ScriptDir "\7-zip", ini, "set", "7zipDir")
+        IniWrite(SmartZipDir "\7-zip", ini, "set", "7zipDir")
 
         IniWrite("10", ini, "set", "successPercent")
         IniWrite("0", ini, "set", "delSource")
         IniWrite("0", ini, "set", "delWhenHasPass")
         IniWrite("5", ini, "set", "logLevel")
-        IniWrite(A_ScriptDir "\ico.ico", ini, "set", "icon")
+        IniWrite(SmartZipDir "\ico.ico", ini, "set", "icon")
 
         IniWrite("123456", ini, "password", "1")
         IniWrite("666888", ini, "password", "2")
@@ -1035,3 +1041,5 @@ ContextMenu()
     }
     Sleep(2000)
 }
+
+RelativePath(str) => StrReplace(str, "%SmartZipDir%", A_ScriptDir)
