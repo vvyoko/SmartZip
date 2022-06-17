@@ -4,15 +4,16 @@
 ;@Ahk2Exe-SetCompanyName  viv
 ;@Ahk2Exe-SetOrigFilename SmartZip.exe
 ;@Ahk2Exe-SetMainIcon     ico.ico
-;@Ahk2Exe-SetFileVersion 2.20
-;@Ahk2Exe-SetProductVersion 13
+;@Ahk2Exe-SetFileVersion 2.21
+;@Ahk2Exe-SetProductVersion 14
 ;@Ahk2Exe-ExeName SmartZip.exe
-currentVersion := 13
+currentVersion := 14
 
 #SingleInstance off
 #NoTrayIcon
 
-ini := A_ScriptDir "\SmartZip.ini"
+app := "SmartZip"
+ini := A_ScriptDir "\" app ".ini"
 IniCreate
 zip := SmartZip(RelativePath(IniRead(ini, "set", "7zipDir", "")))
 
@@ -44,7 +45,7 @@ class SmartZip
         sevenZipDir := RTrim(sevenZipDir, "\")
 
         if !DirExist(sevenZipDir)
-            MsgBox("请在 SmartZip.ini 中 7zipDir 选项中设置 7zip 的文件夹"), ExitApp(2)
+            MsgBox("请在 " app ".ini 中 7zipDir 选项中设置 7zip 的文件夹"), ExitApp(2)
 
         this.7z := sevenZipDir "\7z.exe"
         this.7zG := sevenZipDir "\7zG.exe"
@@ -76,7 +77,7 @@ class SmartZip
         SetWorkingDir(this.dir := dir)
 
         this.continue := this.guiShow := false
-        this.log := this.testLog := ''
+        this.pid := this.log := this.testLog := ''
 
         this.ext := Map()
         this.extExp := []
@@ -114,34 +115,38 @@ class SmartZip
 
     Unzip()
     {
-        password := ["", IniRead(ini, "password", "lastPass", ""), FormatPassword(A_Clipboard)]
+        password := ["", IniRead(ini, "temp", "lastPass", ""), FormatPassword(A_Clipboard)]
         autoAddPass := IniRead(ini, "set", "autoAddPass", 0)
         dynamicPassSort := IniRead(ini, "set", "dynamicPassSort", 0)
         test := IniRead(ini, "set", "test", 0)
-
+        partSkip := IniRead(ini, "set", "partSkip", 0)
         delSource := IniRead(ini, "set", "delSource", 0)
         delWhenHasPass := IniRead(ini, "set", "delWhenHasPass", 0)
         succesSpercent := IniRead(ini, "set", "succesSpercent", 0)
         successMinSize := IniRead(ini, "set", "successMinSize", 0)
-        addCurrentDir2Pass := IniRead(ini, "personalized", "addCurrentDir2Pass", false)
+        targetDir := RTrim(IniRead(ini, "set", "targetDir", ""), "\")
+
+        addDir2Pass := IniRead(ini, "personalized", "addDir2Pass", false)
         guiShow := IniRead(ini, "temp", "guiShow", "")	;批量解压文件中某项为嵌套压缩包时不显示7zip界面
         isLoop := IniRead(ini, "temp", "isLoop", "")
 
         this.IniReadLoop("password", password)
 
-        passwordMap := Map()
-        if autoAddPass || dynamicPassSort
-            this.IniReadLoop("password", passwordMap)
+        if targetDir && DirExist(targetDir)
+            SetWorkingDir(this.dir := targetDir)
 
-        if dynamicPassSort
+        if dynamicPassSort || autoAddPass
         {
             this.IniReadLoop("password", dynamicPassArr := [])
-            dynamicPassMap := Map()
+            passwordMap := Map()
+
             for i in dynamicPassArr
             {
-                dynamicPassMap[dynamicPassArr[A_Index]] := [dynamicPassArr[A_Index], IniRead(ini, "passwordSort", A_Index, -1)]
-                if dynamicPassMap[dynamicPassArr[A_Index]][2] < 0
-                    IniWrite(dynamicPassMap[dynamicPassArr[A_Index]][2] := 0, ini, "passwordSort", A_Index)
+                passwordMap[i] := A_Index
+                dynamicPassArr[A_Index] := [i, IniRead(ini, "passwordSort", A_Index, "")]
+
+                if !IsNumber(dynamicPassArr[A_Index][2])
+                    IniWrite(dynamicPassArr[A_Index][2] := 0, ini, "passwordSort", A_Index)
             }
         }
 
@@ -155,16 +160,21 @@ class SmartZip
             currentSize := FileGetSize(i)
             hideBool := currentSize / 1024 / 1024 < this.hideRunSize
 
+            SplitPath(i, &nameWithExt, &dir)
+
+            if partSkip && IsPart(nameWithExt)
+            {
+                this.Loging("可能是分卷包  <--> " i, A_LineNumber, 5)
+                continue
+            }
+
             if this.muilt && !this.guiShow && !hideBool
                 IniWrite(1, ini, "temp", "guiShow"), this.Gui()
 
-            if addCurrentDir2Pass
-            {
-                SplitPath(i, , &dirPassword)
-                password.Push(RegExReplace(dirPassword, ".+\\"))
-            }
+            if addDir2Pass
+                password.Push(RegExReplace(dir, ".+\\"))
             zipx(i)
-            if addCurrentDir2Pass
+            if addDir2Pass
                 password.RemoveAt(password.Length)
 
             if !DirExist(tmpDir)	;密码错误以及未输入正确密码
@@ -222,8 +232,30 @@ class SmartZip
         if this.muilt
             IniWrite("", ini, "temp", "guiShow")
 
-        if !isLoop && dynamicPassSort
-            PasswordSort
+        if !isLoop
+        {
+            if (autoRemovePass := IniRead(ini, "Set", "autoRemovePass", "0")) && (dynamicPassSort || autoAddPass)
+            {
+                if dynamicPassSort
+                    PasswordSort
+
+                for i in dynamicPassArr
+                    if A_Index > autoRemovePass
+                        PasswordClear(A_Index, true)
+                if dynamicPassArr.Length > autoRemovePass
+                    dynamicPassArr.RemoveAt(autoRemovePass + 1, dynamicPassArr.Length - autoRemovePass)
+
+            } else if dynamicPassSort
+                PasswordSort
+        }
+
+        IsPart(name)
+        {
+            if name ~= "i)\.part\d\.rar$" && !InStr(name, ".part1.rar")
+                return true
+            else if name ~= "\..+\.\d+$" && !(name ~= "\..+.0+1")
+                return true
+        }
 
         ;解压嵌套
         UnZipNesting(path, ext)
@@ -252,9 +284,9 @@ class SmartZip
             pass := ""
             for i in password
             {
-                this.isCmdReturn := false
                 if test && A_Index = 1
                 {
+                    this.isCmdReturn := false
                     this.needPass := 3
                     cmdArgs := this.7z ' l -slt -bsp1 "' path '"'
                     if this.cmdLog
@@ -277,25 +309,12 @@ class SmartZip
                 if !this.error
                 {
                     if i
-                    {
-                        IniWrite(i, ini, "password", "lastPass"), pass := ' -p"' i '"'
-
-                        if autoAddPass && !passwordMap.Has(i)
-                            IniWrite(i, ini, "password", passwordMap.Count + 1), passwordMap[i] := true
-
-                        if dynamicPassSort
-                        {
-                            if !dynamicPassMap.Has(i)
-                                dynamicPassMap[i] := [i, 0]
-                            else
-                                dynamicPassMap[i][2]++
-                        }
-                    }
+                        pass := ' -p"' AddPass(i) '"'
                     break
                 }
             }
 
-            if !this.error || (test && !this.needPass)	;密码正确或无需密码
+            if (test && !this.needPass) || !this.error	;密码正确或无需密码
             {
                 this.Run7z(hideBool, 'x', path, '" -aou -o' tmpDir pass, hideBool || this.guiShow || guiShow, () => IsSuccess(), A_LineNumber)
 
@@ -308,9 +327,64 @@ class SmartZip
                 }
             } else
             {
+                this.tryPasssword := ""
+                if autoAddPass
+                    SetTimer(TrackPass, 10)
                 this.Run7z(false, 'x', path, '" -aou -o' tmpDir, , () => IsSuccess(), A_LineNumber)
+                SetTimer(TrackPass, 0)	;, ToolTip()
+
+                if this.tryPasssword && this.exitCode != 255
+                {
+                    this.error := true
+                    this.CheckCMD(, this.7z ' t -bsp1 "' path '" -p"' this.tryPasssword '"')
+                    if !this.error
+                        AddPass(this.tryPasssword)
+                }
+
                 if IsSuccess() && delWhenHasPass
                     this.RecycleItem(path, A_LineNumber)	;密码错误需手动输入密码
+            }
+
+            TrackPass()
+            {
+                title := "ahk_pid " this.pid
+                if WinExist(title) && WinActive(title)
+                {
+                    pwd := ""
+                    try
+                        if (str := ControlGetText("Edit1", title))
+                            this.tryPasssword := str
+
+                    try
+                        if ControlGetText("Static14", title) > 1
+                            this.tryPasssword := ""
+
+                        ; if this.tryPasssword
+                        ;     ToolTip "当前密码 : " this.tryPasssword
+                }
+                ; else
+                ;     ToolTip
+
+            }
+
+            AddPass(pass)
+            {
+                if !pass
+                    return
+
+                IniWrite(pass, ini, "temp", "lastPass")
+
+                if (dynamicPassSort || autoAddPass) && !passwordMap.Has(pass)
+                {
+                    if !passwordMap.Has(pass)
+                        dynamicPassArr.Push([pass, 0]), passwordMap[pass] := dynamicPassArr.Length
+                    else
+                        dynamicPassArr[passwordMap[pass]][2]++
+
+                    if autoAddPass
+                        IniWrite(pass, ini, "password", passwordMap.Count)
+                }
+                return pass
             }
 
             CheckEncrypted(LineNum, Line)
@@ -337,7 +411,7 @@ class SmartZip
                     LogAndReturn(1, A_LineNumber)
                 else if InStr(Line, "Enter password (will not be echoed):")
                     LogAndReturn(1, A_LineNumber)
-                else if InStr(Line, "Errors: 1") || InStr(Line, "Cannot open the file as archive")
+                else if InStr(Line, "Errors: 1") || InStr(Line, "Cannot open the file as archive") || InStr(Line, "Unexpected end of archive")	;|| InStr(Line, "ERRORS:")
                     this.continue := true, LogAndReturn(2, A_LineNumber)
 
                 LogAndReturn(num := "", logLineNum := "")
@@ -427,33 +501,45 @@ class SmartZip
 
         PasswordSort()
         {
-            arrTemp := []
-            for i in dynamicPassMap
-                arrTemp.Push(dynamicPassMap[i])
-            i := 1
-            while (i <= arrTemp.Length)
+            ;排序
+            i := 0
+            while (++ i <= dynamicPassArr.Length)
             {
-                j := i + 1
-                while (j <= arrTemp.Length)
+                j := 0
+                while (++ j <= dynamicPassArr.Length - i)
                 {
-                    if arrTemp[i][2] < arrTemp[j][2]
+                    if dynamicPassArr[j][2] < dynamicPassArr[j + 1][2]
                     {
-                        temp := arrTemp[i]
-                        arrTemp[i] := arrTemp[j]
-                        arrTemp[j] := temp
+                        temp := dynamicPassArr[j]
+                        dynamicPassArr[j] := dynamicPassArr[j + 1]
+                        dynamicPassArr[j + 1] := temp
                     }
-                    j++
                 }
-                i++
             }
-            for i in arrTemp
+
+            for i in dynamicPassArr
             {
                 if IniRead(ini, "password", A_Index, "") != i[1]
                     IniWrite(i[1], ini, "password", A_Index)
                 if IniRead(ini, "passwordSort", A_Index, "") != i[2]
                     IniWrite(i[2], ini, "passwordSort", A_Index)
-                msg .= i[1] "@" i[2] "`n"
             }
+
+            loop	;清除重复密码
+            {
+                if IniRead(ini, "password", dynamicPassArr.Length + A_Index, "")
+                    PasswordClear(dynamicPassArr.Length + A_Index, true)
+                else
+                    break
+            }
+        }
+
+        PasswordClear(index, delete := false)
+        {
+            if delete
+                IniDelete(ini, "password", index), IniDelete(ini, "passwordSort", index)
+            else
+                IniWrite("", ini, "password", index), IniWrite("", ini, "passwordSort", index)
         }
 
         FormatPassword(str) => StrLen(str) < 100 ? RegExReplace(RegExReplace(str, "(\R*)"), "^[ \t]+|[ \t]+$") : ""	;移除所有换行符及首尾所有空格或制表符
@@ -461,8 +547,7 @@ class SmartZip
 
     OpenZip()
     {
-        SplitPath(this.arr[1], , , &ext, &nameNoExt)
-        this.isCmdReturn := false
+        SplitPath(this.arr[1], , &dir, &ext, &nameNoExt)
 
         if !this.muilt
         {
@@ -495,10 +580,9 @@ class SmartZip
             path := ""
             for i in this.arr
                 path .= ' "' i '" '
-            zipName := this.muilt ? StrReplace(RegExReplace(this.dir, ".+\\"), ":") : nameNoExt
+            zipName := this.muilt ? StrReplace(RegExReplace(this.dir, ".+\\"), ":") : DirExist(this.arr[1]) ? RegExReplace(this.arr[1], ".+\\") : nameNoExt
             ext := RegExReplace(args, '(.+?)".*', "$1")
-
-            this.Run7z(, 'a', zipName := this.AUO(zipName, ext), args path, , , A_LineNumber)
+            this.Run7z(, 'a', this.AUO(zipName, ext), args path, , , A_LineNumber)
         }
     }
 
@@ -570,10 +654,21 @@ class SmartZip
 
     Run7z(is7z := false, xa := "x", path := "", args := "", hide := false, log := true, linenum := "")
     {
+        this.pid := ""
+        if !is7z
+            SetTimer(WinGetPID, -10)
         this.exitCode := RunWait((is7z ? this.7z : this.7zG) ' ' xa ' "' path args, , hide ? "hide" : "")
 
         if log
             this.Loging('[' this.exitCode '] ' (xa = 'x' ? "解压" : "压缩") " <--> " path, linenum)
+
+        WinGetPID()
+        {
+            WinWait("ahk_exe 7zG.exe")
+            static winmgmts := ComObjGet("winmgmts:")
+            winmgmts.ExecQuery('Select * from Win32_Process where Name="7zG.exe" and CommandLine like "%' StrReplace(path, "\", "\\") '%"')._NewEnum()(&proc)
+            this.pid := IsSet(proc) ? proc.ProcessID : ""
+        }
     }
 
     Gui()
@@ -585,7 +680,6 @@ class SmartZip
         DllCall("RegisterShellHookWindow", "UInt", WinExist())
         OnMessage(DllCall("RegisterWindowMessage", "Str", "SHELLHOOK"), ShellMessage)
 
-        sub := "ahk_exe 7zG.exe"
         g.SetFont(, "Segoe UI")
         g.BackColor := "FFFFFF"
 
@@ -627,13 +721,19 @@ class SmartZip
 
         g.OnEvent("Close", Close)
         g.OnEvent("Escape", Close)
+
+        sub() => "ahk_pid " this.pid
+        ; sub() => this.pid ? "ahk_pid " this.pid : "ahk_exe 7zG.exe"
         g.Show("AutoSize")
 
         Close(*)
         {
-            if ProcessExist("7zG.exe")
-                ProcessClose("7zG.exe"), ProcessWaitClose("7zG.exe")
-            if this.HasOwnProp("tmpDir")
+            if ProcessExist(this.pid)
+                ProcessClose(this.pid), ProcessWaitClose(this.pid)
+            ; else if ProcessExist("7zG.exe")
+            ;     ProcessClose("7zG.exe"), ProcessWaitClose("7zG.exe")
+
+            if this.HasOwnProp("temp")
                 this.RecycleItem(this.temp, A_LineNumber, true)
             IniWrite("", ini, "temp", "guiShow")
             ExitApp(255)
@@ -646,40 +746,40 @@ class SmartZip
             if !ProcessExist("7zG.exe")
                 return
 
-            if WinExist(sub)
-                WinHide(sub), GuiCtrlObj.Text := "显示原始界面"
+            if WinExist(sub())
+                WinHide(sub()), GuiCtrlObj.Text := "显示原始界面"
             else
-                WinShow(sub), WinActivate(sub), GuiCtrlObj.Text := "隐藏原始界面"
+                WinShow(sub()), WinActivate(sub()), GuiCtrlObj.Text := "隐藏原始界面"
 
             DetectHiddenWindows(1)
         }
 
         ButtonPause(GuiCtrlObj, Info)
         {
-            if !WinExist(sub)
+            if !WinExist(sub())
                 return
 
             textSave := GuiCtrlObj.Text
-            ControlClick("Button2", sub)
+            ControlClick("Button2", sub())
             ShellMessage
-            while WinExist(sub) && GuiCtrlObj.Text = textSave
-                ControlClick("Button2", sub), Sleep(500), ShellMessage()
+            while WinExist(sub()) && GuiCtrlObj.Text = textSave
+                ControlClick("Button2", sub()), Sleep(500), ShellMessage()
         }
 
         ButtonCance(GuiCtrlObj, Info)
         {
-            if !WinExist(sub)
+            if !WinExist(sub())
                 return
-            ControlClick("Button3", sub)
+            ControlClick("Button3", sub())
             ShellMessage
-            while WinExist(sub) && !InStr(WinGetText(sub), "否(&N)")
-                ControlClick("Button3", sub), Sleep(500)
+            while WinExist(sub()) && !InStr(WinGetText(sub()), "否(&N)")
+                ControlClick("Button3", sub()), Sleep(500)
 
-            WinWaitActive(sub)
+            WinWaitActive(sub())
             WinWaitClose
             num := 0
             loop 5
-                if !WinExist(sub)
+                if !WinExist(sub())
                     num++
 
             if num = 5
@@ -689,17 +789,17 @@ class SmartZip
         ShellMessage(wParam := 6, *)
         {
             static timeSave := A_TickCount
-            if A_TickCount - timeSave < 100 || wParam != 6 || !WinExist(sub)
+            if A_TickCount - timeSave < 50 || wParam != 6 || !WinExist(sub())
                 return
 
             IsChanged(总进度1, "总进度:")
             , IsChanged(总进度2, this.index "\" this.arr.Length)
             try
             {
-                if g.Title != WinGetTitle(sub)
-                    g.Title := WinGetTitle(sub)
+                if g.Title != WinGetTitle(sub())
+                    g.Title := WinGetTitle(sub())
 
-                arr := StrSplit(WinGetText(sub), "`n")
+                arr := StrSplit(WinGetText(sub()), "`n")
                 for i in arr
                 {
                     if InStr(i, "您真的要取消吗")
@@ -916,9 +1016,12 @@ class SmartZip
             for i in checkSave.OwnProps()
                 check.%i% := checkSave.%i%.Clone()
 
+            this.isCmdReturn := false
+            this.error := true
             cmdArgs := line
             if this.cmdLog
                 this.testLog .= '`n#####`n' cmdArgs '`n'
+
             this.RunCmd(cmdArgs)
         } else if line
         {
@@ -986,130 +1089,7 @@ class SmartZip
 
 }
 
-IniCreate()
-{
-    iniExist := FileExist(ini)
-    version := IniRead(ini, "set", "version", "0")
-    VersionsCompare(num) => !iniExist || version < num
-    SmartZipDir := "%SmartZipDir%"
-
-    if !iniExist
-    {
-        IniWrite(SmartZipDir "\7-zip", ini, "set", "7zipDir")
-
-        IniWrite("0", ini, "set", "delSource")
-        IniWrite("0", ini, "set", "delWhenHasPass")
-        IniWrite("10", ini, "set", "successPercent")
-        IniWrite("5", ini, "set", "logLevel")
-        IniWrite(SmartZipDir "\ico.ico", ini, "set", "icon")
-
-        IniWrite("123456", ini, "password", "1")
-        IniWrite("666888", ini, "password", "2")
-        IniWrite("1024", ini, "password", "3")
-        IniWrite("++", ini, "password", "4")
-        IniWrite("", ini, "password", "5")
-        IniWrite("", ini, "password", "6")
-        IniWrite("", ini, "password", "7")
-
-        IniWrite("用7-Zip打开", ini, "menu", "openZipName")
-        IniWrite("智能解压", ini, "menu", "unZipName")
-        IniWrite("压缩", ini, "menu", "addZipName")
-
-        IniWrite("zip", ini, "ext", "1")
-        IniWrite("rar", ini, "ext", "2")
-        IniWrite("7z", ini, "ext", "3")
-        IniWrite("001", ini, "ext", "4")
-        IniWrite("cab", ini, "ext", "5")
-        IniWrite("bz2", ini, "ext", "6")
-        IniWrite("gz", ini, "ext", "7")
-        IniWrite("gzip", ini, "ext", "8")
-        IniWrite("tar", ini, "ext", "9")
-
-        IniWrite("^\d+$", ini, "extExp", "1")
-        IniWrite("zi", ini, "extExp", "2")
-        IniWrite("7", ini, "extExp", "3")
-        IniWrite("z", ini, "extExp", "4")
-
-        IniWrite("iso", ini, "extForOpen", "1")
-        IniWrite("apk", ini, "extForOpen", "2")
-        IniWrite("wim", ini, "extForOpen", "3")
-        IniWrite("exe", ini, "extForOpen", "4")
-
-        IniWrite("mp+3<--->mp3", ini, "renameExt", "1")
-
-        IniWrite("666666-<--->", ini, "renameName", "1")
-
-        IniWrite("^[ 	]+<--->", ini, "renameExp", "1")
-        IniWrite("[ 	]+$<--->", ini, "renameExp", "1")
-
-        IniWrite("", ini, "deleteExt", "1")
-
-        IniWrite("来自666666.org", ini, "deleteName", "1")
-        IniWrite("关注666666网.txt", ini, "deleteName", "2")
-        IniWrite("扫码关注公众号.jpg", ini, "deleteName", "3")
-        IniWrite("前往_666666", ini, "deleteName", "4")
-        IniWrite("自行添加文件后缀.7z.txt", ini, "deleteName", "5")
-
-        IniWrite('.zip" -tzip -mx=0 -aou -ad', ini, "7z", "openAdd")
-        IniWrite('.zip"', ini, "7z", "add")
-
-        IniWrite("", ini, "deleteExp", "1")
-
-        IniWrite("Wrong password<--->1", ini, "unZipCheckError", "1")
-        IniWrite("ERROR:<--->10", ini, "unZipCheckError", "2")
-        IniWrite("No files to process<--->1", ini, "unZipCheckError", "3")
-        IniWrite("Cannot open encrypted archive<--->1", ini, "unZipCheckError", "4")
-
-        IniWrite("", ini, "unZipCheckErrorExp", "1")
-
-        IniWrite("Errors: 1<--->1", ini, "unZipCheckErrorContinueExP", "1")
-        IniWrite("Cannot open the file as archive<--->1", ini, "unZipCheckErrorContinueExP", "2")
-
-        IniWrite("Everything is Ok<--->1", ini, "unZipCheckSuccess", "1")
-
-        IniWrite("", ini, "unZipCheckSuccessExp", "1")
-
-        IniWrite("Errors: 1<--->1", ini, "openZipCheckError", "1")
-        IniWrite("ERROR:<--->1", ini, "openZipCheckError", "2")
-
-        IniWrite("", ini, "openZipCheckErrorExp", "1")
-
-        IniWrite("Enter password (will not be echoed):<--->1", ini, "openZipCheckSuccess", "1")	;需要输入密码则可能是压缩文件
-
-        IniWrite("\d*-\d*-\d* *\d*:\d*:\d* *\d* *\d* *(\d*) files(, (\d*) folders)?<--->1", ini, "openZipCheckSuccessExp", "1")	;多少个文件多少个文件夹则可能是压缩文件
-    }
-
-    if VersionsCompare(9)
-    {
-        IniWrite("1", ini, "set", "muiltNesting")
-        IniWrite("10", ini, "set", "hideRunSize")
-        IniWrite("0", ini, "set", "cmdLog")
-    }
-
-    if VersionsCompare(10)
-        IniWrite("10", ini, "set", "successMinSize")
-
-    if VersionsCompare(12)
-    {
-        IniWrite("1", ini, "menu", "contextMenu")
-        IniWrite("1", ini, "menu", "sendTo")
-        IniWrite("0", ini, "personalized", "addCurrentDir2Pass")
-    }
-
-    if VersionsCompare(13)
-    {
-        IniWrite("0", ini, "set", "autoAddPass")
-        IniWrite("0", ini, "set", "dynamicPassSort")
-        IniWrite("0", ini, "set", "test")
-        IniWrite("0", ini, "set", "successMinSize")
-    }
-
-    if VersionsCompare(currentVersion)
-        IniWrite(currentVersion, ini, "set", "version")
-
-    if !iniExist
-        IniSetting
-}
+RelativePath(str) => StrReplace(str, "%SmartZipDir%", A_ScriptDir)
 
 IniSetting()
 {
@@ -1123,7 +1103,7 @@ IniSetting()
     SetTimer(fn, 0)
     hasShow++
 
-    fn() => WinExist("SmartZip.ini") && WinActive() ? ToolTip("设置完 ini 后会继续运行", 0, 0) : ToolTip()
+    fn() => WinExist(app ".ini") && WinActive() ? ToolTip("设置完 ini 后会继续运行", 0, 0) : ToolTip()
 }
 
 ContextMenuOrSendTo()
@@ -1137,7 +1117,7 @@ ContextMenuOrSendTo()
     unZipName := IniRead(ini, "menu", "unZipName", "")
     addZipName := IniRead(ini, "menu", "addZipName", "")
 
-    set := Gui(, "SmartZip")
+    set := Gui(, app)
     set.SetFont(, "Segoe UI")
     set.BackColor := "FFFFFF"
     set.Add("GroupBox", "xm ym+10  Section  w200 h180", "右键菜单").GetPos(&x, &y, &w, &h)
@@ -1239,4 +1219,129 @@ ContextMenuOrSendTo()
     }
 }
 
-RelativePath(str) => StrReplace(str, "%SmartZipDir%", A_ScriptDir)
+IniCreate()
+{
+    iniExist := FileExist(ini)
+    version := IniRead(ini, "temp", "version", "0")
+    VersionsCompare(num) => !iniExist || version < num
+    SmartZipDir := "%SmartZipDir%"
+
+    if !iniExist
+    {
+        IniWrite(SmartZipDir "\7-zip", ini, "set", "7zipDir")
+
+        IniWrite("0", ini, "set", "delSource")
+        IniWrite("0", ini, "set", "delWhenHasPass")
+        IniWrite("10", ini, "set", "successPercent")
+        IniWrite("5", ini, "set", "logLevel")
+        IniWrite(SmartZipDir "\ico.ico", ini, "set", "icon")
+
+        IniWrite("123456", ini, "password", "1")
+        IniWrite("666888", ini, "password", "2")
+        IniWrite("1024", ini, "password", "3")
+        IniWrite("++", ini, "password", "4")
+        IniWrite("", ini, "password", "5")
+        IniWrite("", ini, "password", "6")
+        IniWrite("", ini, "password", "7")
+
+        IniWrite("用7-Zip打开", ini, "menu", "openZipName")
+        IniWrite("智能解压", ini, "menu", "unZipName")
+        IniWrite("压缩", ini, "menu", "addZipName")
+
+        IniWrite("zip", ini, "ext", "1")
+        IniWrite("rar", ini, "ext", "2")
+        IniWrite("7z", ini, "ext", "3")
+        IniWrite("001", ini, "ext", "4")
+        IniWrite("cab", ini, "ext", "5")
+        IniWrite("bz2", ini, "ext", "6")
+        IniWrite("gz", ini, "ext", "7")
+        IniWrite("gzip", ini, "ext", "8")
+        IniWrite("tar", ini, "ext", "9")
+
+        IniWrite("^\d+$", ini, "extExp", "1")
+        IniWrite("zi", ini, "extExp", "2")
+        IniWrite("7", ini, "extExp", "3")
+        IniWrite("z", ini, "extExp", "4")
+
+        IniWrite("iso", ini, "extForOpen", "1")
+        IniWrite("apk", ini, "extForOpen", "2")
+        IniWrite("wim", ini, "extForOpen", "3")
+        IniWrite("exe", ini, "extForOpen", "4")
+
+        IniWrite("mp+3<--->mp3", ini, "renameExt", "1")
+
+        IniWrite("666666<--->", ini, "renameName", "1")
+
+        IniWrite("^[ 	]+<--->", ini, "renameExp", "1")
+        IniWrite("[ 	]+$<--->", ini, "renameExp", "2")
+
+        IniWrite("", ini, "deleteExt", "1")
+
+        IniWrite("来自666666.com", ini, "deleteName", "1")
+        IniWrite("扫码关注公众号.jpg", ini, "deleteName", "2")
+
+        IniWrite('.zip" -tzip -mx=0 -aou -ad', ini, "7z", "openAdd")
+        IniWrite('.zip"', ini, "7z", "add")
+
+        IniWrite("", ini, "deleteExp", "1")
+
+        IniWrite("Wrong password<--->1", ini, "unZipCheckError", "1")
+        IniWrite("ERROR:<--->10", ini, "unZipCheckError", "2")
+        IniWrite("No files to process<--->1", ini, "unZipCheckError", "3")
+        IniWrite("Cannot open encrypted archive<--->1", ini, "unZipCheckError", "4")
+
+        IniWrite("", ini, "unZipCheckErrorExp", "1")
+
+        IniWrite("Errors: 1<--->1", ini, "unZipCheckErrorContinueExP", "1")
+        IniWrite("Data Error :<--->1", ini, "unZipCheckErrorContinueExP", "1")
+        IniWrite("Cannot open the file as archive<--->1", ini, "unZipCheckErrorContinueExP", "2")
+
+        IniWrite("Everything is Ok<--->1", ini, "unZipCheckSuccess", "1")
+
+        IniWrite("", ini, "unZipCheckSuccessExp", "1")
+
+        IniWrite("Errors: 1<--->1", ini, "openZipCheckError", "1")
+        IniWrite("ERROR:<--->1", ini, "openZipCheckError", "2")
+
+        IniWrite("", ini, "openZipCheckErrorExp", "1")
+
+        IniWrite("Enter password (will not be echoed):<--->1", ini, "openZipCheckSuccess", "1")	;需要输入密码则可能是压缩文件
+
+        IniWrite("\d*-\d*-\d* *\d*:\d*:\d* *\d* *\d* *(\d*) files(, (\d*) folders)?<--->1", ini, "openZipCheckSuccessExp", "1")	;多少个文件多少个文件夹则可能是压缩文件
+    }
+
+    if VersionsCompare(9)
+    {
+        IniWrite("1", ini, "set", "muiltNesting")
+        IniWrite("10", ini, "set", "hideRunSize")
+        IniWrite("0", ini, "set", "cmdLog")
+    }
+
+    if VersionsCompare(12)
+    {
+        IniWrite("1", ini, "menu", "contextMenu")
+        IniWrite("1", ini, "menu", "sendTo")
+    }
+
+    if VersionsCompare(13)
+    {
+        IniWrite("0", ini, "set", "autoAddPass")
+        IniWrite("0", ini, "set", "dynamicPassSort")
+        IniWrite("0", ini, "set", "test")
+        IniWrite("0", ini, "set", "successMinSize")
+    }
+
+    if VersionsCompare(14)
+    {
+        IniWrite("", ini, "set", "targetDir")
+        IniWrite("1", ini, "set", "partSkip")
+        IniWrite("0", ini, "set", "autoRemovePass")
+        IniWrite("0", ini, "personalized", "addDir2Pass")
+    }
+
+    if VersionsCompare(currentVersion)
+        IniWrite(currentVersion, ini, "temp", "version")
+
+    if !iniExist
+        IniSetting
+}
