@@ -8,7 +8,8 @@
 ;@Ahk2Exe-SetProductVersion 15
 ;@Ahk2Exe-ExeName SmartZip.exe
 currentVersion := 15
-buileTime := FormatTime(A_Now, "yyyy/M/d H:m:s")
+; buileTime := FormatTime(A_Now, "yyyy/M/d H:m:s")
+buileTime := "2022/6/20 11:50:11"
 app := "SmartZip"
 
 #SingleInstance off

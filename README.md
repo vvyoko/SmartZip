@@ -59,7 +59,7 @@
 ## 预览图
  - 设置界面
 
-![set](pic\set.gif)
+![set](pic/set.gif)
 
  - 资源管理器右键界面
 
@@ -71,12 +71,12 @@
 
  - 批量解压界面
 
-![addZip](pic\addZip.jpg)
+![addZip](pic/addZip.jpg)
 
 
  - 批量压缩界面
 
-![unZip](pic\unZip.jpg)
+![unZip](pic/unZip.jpg)
 
 
 ## 相关链接
