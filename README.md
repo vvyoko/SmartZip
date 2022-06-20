@@ -10,23 +10,18 @@
     - 解压完成后按照指定规则处理压缩后的文件,如重命名,删除
     - 解压嵌套压缩包
       - 文件后缀名符合`ini-ext,extExp` 规则则解压
-      - 默认解压单个文件的嵌套压缩类似 `a.zip/b.zip`
-      - 通过ini设置支持多个嵌套 `a.zip/b.zip, c.rar, d,7, ...` 不会遍历子文件夹
-          - 默认开启,可能会导致分卷压缩包出错,出错时可关闭此选项及在回收站找回被删除文件
+      - **嵌套压缩包解压后会删除**
  - 智能打开
    - 如果是压缩包则打开,如果不是则显示添加到压缩包界面
  - 压缩
    - 全是文件夹则每个文件夹生成一个压缩包, 否则生成单个压缩包
 
 ## 设置方式
- - 首先运行 `SmartZip.exe`,会自动生成`SmartZip.ini`文件并打开
- - 然后参考以下链接设置,**必需设置 `7zipDir`**
-     - [INI设置](ini.md)
+ - 直接运行 `SmartZip.exe` 会显示设置界面 **3.0+**
  - **建议清空所有 `password` `rename` `delete` 然后按照需求添加**
- - 默认ini为了让功能能被人使用,默认开启了大部分功能
-   - 比方说日志,右键菜单
- - 绝大多数功能都能自定义,具体查看上述`ini设置` 链接
-
+ - 可批量从`tx`t或旧版本`ini`设置中导入密码  **3.0+**
+ - 更多自定义请直接编辑ini,参考以下链接设置,后续可能不再更新ini文档
+     - [INI设置](ini.md)
 
 ## 运行方式
  - 如果启用了右键,可在资源管理器中右键文件使用
@@ -55,15 +50,16 @@
    - 智能解压: `Contextmenu.exe  x`
    - 使用7-zip打开: `Contextmenu.exe  o`
    - 压缩: `Contextmenu.exe  a`
+ - 直接运行 `SmartZip.exe` 然后拖拽文件到界面上会触发智能解压 **3.0+**
  - 拖拽文件到 `SmartZip.exe` 上会触发智能解压
 
 ## 提示
  - **更新版本建议备份 ini以防出错**
 
 ## 预览图
- - 右键及发送到注册界面
+ - 设置界面
 
-![1](https://user-images.githubusercontent.com/2145741/173806126-bfdce216-7f43-4c81-8dae-506ae0d1c543.jpg)
+![set](pic\set.gif)
 
  - 资源管理器右键界面
 
@@ -75,12 +71,12 @@
 
  - 批量解压界面
 
-![4](https://user-images.githubusercontent.com/2145741/173320704-35a051a1-0f03-4172-b232-2e410b7a4311.jpg)
+![addZip](pic\addZip.jpg)
 
 
  - 批量压缩界面
 
-![5](https://user-images.githubusercontent.com/2145741/173320771-15412318-05ef-4158-b01c-4ab828e12ec6.jpg)
+![unZip](pic\unZip.jpg)
 
 
 ## 相关链接
