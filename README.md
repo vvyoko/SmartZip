@@ -37,10 +37,12 @@
     - 缺点是在二级目录里
  - 通过直接传递参数运行(推荐但比较繁杂)
    - 智能解压: `SmartZip.exe  x  file1 file2 file3 ....`
+   - 手动指定编码解压: `SmartZip.exe  xc  file1 file2 file3 ....`
    - 使用7-zip打开: `SmartZip.exe  o  file1`
    - 压缩: `SmartZip.exe  a  file1 file2 file3 ....`
  - Directory Opus 示例
    - 智能解压: `SmartZip.exe x {allfilepath}`
+   - 手动指定编码解压: `SmartZip.exe xc {allfilepath}`
    - 使用7-zip打开: `SmartZip.exe o {allfilepath} `
    - 压缩: `SmartZip.exe a {allfilepath} `
  - 向 `Contextmenu.exe` 传递参数或直接运行
@@ -48,6 +50,7 @@
     - 选中文件然后以快捷键或其他方法调用`Contextmenu.exe`
     - 无参时默认智能解压
    - 智能解压: `Contextmenu.exe  x`
+   - 手动指定编码解压: `Contextmenu.exe  xc`
    - 使用7-zip打开: `Contextmenu.exe  o`
    - 压缩: `Contextmenu.exe  a`
  - 直接运行 `SmartZip.exe` 然后拖拽文件到界面上会触发智能解压 **3.0+**
@@ -61,18 +64,17 @@
 
 ![set](pic/set.gif)
 
- - 资源管理器右键界面
+ - 手动指定编码解压界面
 
-![2](https://user-images.githubusercontent.com/2145741/173320643-509a43e2-fb9f-4ca5-981f-c99b7f020f1e.jpg)
+![xc](pic/xc.jpg)
 
- - 发送到界面
+ - 右键菜单界面
 
-![3](https://user-images.githubusercontent.com/2145741/173808930-bcce4273-c930-4e84-9a40-c52349760fc0.jpg)
+![menu](pic/menu.jpg)
 
  - 批量解压界面
 
 ![addZip](pic/addZip.jpg)
-
 
  - 批量压缩界面
 
