@@ -4,16 +4,16 @@
 ;@Ahk2Exe-SetCompanyName  viv
 ;@Ahk2Exe-SetOrigFilename SmartZip.exe
 ;@Ahk2Exe-SetMainIcon     ico.ico
-;@Ahk2Exe-SetFileVersion 3.2
-;@Ahk2Exe-SetProductVersion 16
+;@Ahk2Exe-SetFileVersion 3.4
+;@Ahk2Exe-SetProductVersion 17
 ;@Ahk2Exe-ExeName SmartZip.exe
-currentVersion := 16
+buildVersion := 18
+MainVersion := "3.4"
 ;Msgbox FormatTime(A_Now, "yyyy/M/d H:m:s")
-buileTime := "2022/6/23 14:41:14"
+buileTime := "2022/8/3 14:27:28"
 app := "SmartZip"
-
 #SingleInstance off
-; #NoTrayIcon
+#NoTrayIcon
 
 ini.Init(A_ScriptDir "\" app ".ini")
 IniCreate
@@ -276,8 +276,8 @@ class SmartZip
 
             this.temp := tmpDir := '__7z' A_Now
 
-            currentSize := FileGetSize(i)
-            hideBool := currentSize / 1024 / 1024 < this.hideRunSize
+            this.currentSize := FileGetSize(i)
+            hideBool := this.currentSize / 1024 / 1024 < this.hideRunSize
 
             part := IsPart(i)
             if this.partSkip && !part
@@ -385,7 +385,7 @@ class SmartZip
             {
                 if A_Index = 1
                 {
-                    this.isCmdReturn := false
+                    this.isFile := this.isCmdReturn := false
                     this.needPass := 4
                     cmdArgs := this.7z ' l -slt -bsp1  "' path '"'
                     if this.cmdLog
@@ -402,7 +402,7 @@ class SmartZip
                             {
                                 if n
                                 {
-                                    this.isCmdReturn := false
+                                    this.isFile := this.isCmdReturn := false
                                     this.needPass := 5
                                     cmdArgs := this.7z ' l -slt -bsp1 -p"' n '" "' path '"'
                                     this.RunCmd(cmdArgs, , CheckEncrypted)
@@ -516,7 +516,6 @@ class SmartZip
 
                     if !this.passwordMap.Has(pass)
                     {
-                        MsgBox(1)
                         this.dynamicPassArr.Push([pass, 0]), this.passwordMap[pass] := this.dynamicPassArr.Length
                         if this.autoAddPass
                             ini.Write(pass, this.passwordMap.Count, "password")
@@ -528,18 +527,17 @@ class SmartZip
 
             CheckEncrypted(LineNum, Line)
             {
-                static isFile := false
                 if this.isCmdReturn
                     return
 
                 if this.cmdLog
                     this.testLog .= "[" LineNum "] " line '`n'
 
-                if !isFile && InStr(Line, "Attributes = A") || Line ~= "CRC = [A-Z0-9]+"
-                    isFile := true
-                else if isFile && InStr(Line, "Attributes = D") || Line ~= "CRC = *?$"
-                    isFile := false
-                else if isFile && InStr(Line, "Encrypted = -")
+                if !this.isFile && InStr(Line, "Attributes = A") || Line ~= "CRC = [A-Z0-9]+"
+                    this.isFile := true
+                else if this.isFile && InStr(Line, "Attributes = D") || Line ~= "CRC = *?$"
+                    this.isFile := false
+                else if this.isFile && InStr(Line, "Encrypted = -")
                     LogAndReturn(0, A_LineNumber)
 
                 else if InStr(Line, "Encrypted = +") || InStr(Line, "Wrong password?")
@@ -572,11 +570,11 @@ class SmartZip
                 if this.exitCode != 255
                 {
                     folderSize := this.fileSystemObject.GetFolder(tmpDir).Size
-                    this.Loging("文件大小: " currentSize " 临时文件夹大小: " folderSize, A_LineNumber)
+                    this.Loging("文件大小: " this.currentSize " 临时文件夹大小: " folderSize, A_LineNumber)
 
-                    if folderSize >= currentSize
+                    if folderSize >= this.currentSize
                         return true
-                    else if folderSize / currentSize * 100 > this.succesSpercent
+                    else if folderSize / this.currentSize * 100 > this.succesSpercent
                         return true
                 }
 
@@ -626,16 +624,24 @@ class SmartZip
                     return this.RecycleItem(path, A_LineNumber)
 
             for ori, out in obj.rename.ext
+            {
                 if !isDir && ext = ori
-                    path := this.MoveItem(path, dir '\' nameNoExt '.' (ext := out), 0, A_LineNumber)
+                {
+                    name := nameNoExt '.' out
+                    break
+                }
+            }
 
             for needle, replaceText in obj.rename.name
                 if InStr(name, needle)
-                    SplitPath(path := this.MoveItem(path, dir '\' StrReplace(name, needle, replaceText), isDir, A_LineNumber), &name, , , &nameNoExt)
+                    name := StrReplace(name, needle, replaceText)
 
             for needle, replaceText in obj.rename.exp
                 if name ~= needle
-                    SplitPath(path := this.MoveItem(path, dir '\' RegExReplace(name, needle, replaceText), isDir, A_LineNumber), &name, , , &nameNoExt)
+                    name := RegExReplace(name, needle, replaceText)
+
+            if path != dir "\" name
+                this.MoveItem(path, dir "\" name, isDir, A_LineNumber)
         }
 
         IsPart(path)
@@ -879,7 +885,7 @@ class SmartZip
                 ProcessClose(this.pid), ProcessWaitClose(this.pid)
             if this.HasOwnProp("temp")
                 this.RecycleItem(this.temp, A_LineNumber, true)
-            if !this.setShow	;why cant use this?
+            if !this.setShow
                 ExitApp(255)
             OnMessage(msgNum, ShellMessage, 0), g.Destroy()
         }
@@ -930,8 +936,18 @@ class SmartZip
                 Close
         }
 
+        DetectError()
+        {
+            DetectHiddenWindows(0)
+            if WinExist(sub())
+                return
+            else
+                WinShow(sub())
+        }
+
         ShellMessage(wParam := 6, *)
         {
+            ListLines(0)
             DetectHiddenWindows(1)
             static timeSave := A_TickCount
 
@@ -966,7 +982,7 @@ class SmartZip
 
                 ; IsChanged(发生错误, arr[7])
 
-                , IsChanged(总大小1, arr[8])
+                IsChanged(总大小1, arr[8])
                 , IsChanged(速度1, arr[9])
                 , IsChanged(已处理1, arr[10])
                 , IsChanged(压缩后大小1, arr[11])
@@ -977,8 +993,14 @@ class SmartZip
                 , IsChanged(文件2, arr[15])
 
                 index := 16
+
                 if this.to = "a"
                     IsChanged(文件3, arr[index++ ])
+
+                if IsNumber(arr[index++ ])	;发生错误
+                    DetectError()	; IsChanged(发生错误2, arr[index -1])
+                else
+                    index--
 
                 IsChanged(总大小2, arr[index++ ])	;16
                 , IsChanged(速度2, arr[index++ ])	;17
@@ -995,7 +1017,7 @@ class SmartZip
                 IsChanged(处理3, arr[index])	;23
             }
             timeSave := A_TickCount
-
+            ListLines(1)
             IsChanged(obj, value, text := 0)
             {
                 if !text
@@ -1017,6 +1039,7 @@ class SmartZip
         else if !this.guiShow
             this.cmdHide := true
         this.exitCode := RunWait((is7z ? this.7z : this.7zG) ' ' xa ' "' path args, , hide ? "hide" : "")
+
         SetTimer(WinGetPID, 0)
         if log
             this.Loging('[' this.exitCode '] ' (xa = 'x' ? "解压" : "压缩") " <--> " path, linenum)
@@ -1029,7 +1052,28 @@ class SmartZip
             WinWait("ahk_exe 7zG.exe", , 3)
             winmgmts.ExecQuery('Select * from Win32_Process where Name="7zG.exe" and CommandLine like "%' StrReplace(path, "\", "\\") '%"')._NewEnum()(&proc)
             if (this.pid := IsSet(proc) ? proc.ProcessID : "")
+            {
+                if this.to = "x" && this.excludeArgs
+                {
+
+                    while (!GetSize())
+                    {
+                        if A_TickCount - this.now > 1000
+                            break
+                    }
+                    if RegExMatch(GetSize(), "(.+) MB$", &size)
+                        this.currentSize := size[1] * 1024 * 1024
+                }
                 SetTimer(WinGetPID, 0)
+            }
+
+            GetSize()
+            {
+                size := ""
+                try
+                    size := ControlGetText("Static15", "ahk_pid " this.pid)
+                return size
+            }
         }
     }
 
@@ -1239,6 +1283,9 @@ Setting()
     addZipNameLnk := sendToDir ini.addZipName ".lnk"
     unZipCPNameLnk := sendToDir ini.unZipCPName ".lnk"
 
+    if zip.setShow
+        return WinActivate(app " ahk_class AutoHotkeyGUI")
+
     if WinExist(app " ahk_class AutoHotkeyGUI")
         WinActivate(), ExitApp(0)
 
@@ -1261,6 +1308,9 @@ Setting()
         excludeName: [],
         deleteExp: [] }
     ini.ReadLoop("password", var.password)
+    passwordMap := Map()
+    for i in var.password
+        passwordMap[i] := ini.Read(A_Index, 0, "passwordSort")
     ini.ReadLoop("ext", var.ext)
     ini.ReadLoop("extExp", var.extExp)
     ini.ReadLoop("extForOpen", var.extForOpen)
@@ -1278,6 +1328,7 @@ Setting()
     GuiEdit("zipDir", "7-zip路径", ini.zipDir, "%SmartZipDir% 为相对路径`n其代表 SmartZip 所在文件夹,不包括最后的 \", "Section")
     GuiEdit("targetDir", "解压路径", ini.targetDir, "为空时默认为当前文件夹")
     pwdList := GuiComboBox("密码列表", var.password)
+    pwdList.OnEvent("Change",(ctrl,info)=> ctrl.ToolTip := passwordMap.Has(ctrl.Text) ? "当前密码使用次数 : " passwordMap[ctrl.Text] : "密码列表")
 
     lineGeneration("xs")
     GuiCheckBox("nesting", ini.nesting, "解压嵌套压缩包", "解压成功删除源文件,只针对单文件")
@@ -1355,7 +1406,7 @@ Setting()
 
     Tab.UseTab(6)
     set.AddText()
-    set.AddText("", app " 3.0 (" ini.version ")")
+    set.AddText("", app " " MainVersion " (" buildVersion ")")
     lineGeneration
     set.AddText("", "修改时间 " buileTime)
     set.AddText()
@@ -1424,6 +1475,25 @@ Setting()
                 if ini.Read(A_Index, "", section) != n
                     ini.Write(n, A_Index, section)
         }
+
+        for i in var.password
+        {
+            if passwordMap.Has(i)
+            {
+                if passwordMap[i] != ini.Read(A_Index, , "passwordSort")
+                    ini.Write(passwordMap[i], A_Index, "passwordSort")
+            } else
+                ini.Write(0, A_Index, "passwordSort")
+        }
+
+        loop
+        {
+            if IsNumber(ini.Read(var.password.Length + A_Index, , "passwordSort"))
+                ini.Delete("passwordSort", var.password.Length + A_Index)
+            else
+                break
+        }
+
         set.isChange := true
         if GuiCtrlObj.Text = "确定"
             ExitApp
@@ -1696,9 +1766,11 @@ WM_MOUSEMOVE(wParam, lParam, msg, Hwnd)
         static PrevHwnd := 0
         static HoverControl := 0
         currControl := GuiCtrlFromHwnd(Hwnd)
-        if (Hwnd != PrevHwnd) {
+        if (Hwnd != PrevHwnd)
+        {
             Text := "", ToolTip()
-            if CurrControl {
+            if CurrControl
+            {
                 if !CurrControl.HasProp("ToolTip")
                     return
                 SetTimer(CheckHoverControl, 50)
@@ -1905,6 +1977,6 @@ IniCreate()
         ini.Write("\d*-\d*-\d* *\d*:\d*:\d* *\d* *\d* *(\d*) files(, (\d*) folders)?<--->1", 1, "openZipCheckSuccessExp")	;多少个文件多少个文件夹则可能是压缩文件
     }
 
-    if VersionsCompare(currentVersion)
-        ini.setWrite("version", currentVersion)
+    if VersionsCompare(buildVersion)
+        ini.setWrite("version", buildVersion)
 }
